@@ -1,95 +1,64 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { useSettingsStore } from '@/stores/settings'
 import { chromeMock } from '../mocks/chrome'
 
-function mockMatchMedia(matches: boolean) {
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    value: vi.fn().mockReturnValue({
-      matches,
-      media: '(prefers-color-scheme: dark)',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }),
-  })
-}
-
-describe('settings store', () => {
+describe('settings store（Phase 3：布局 / 壁纸）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     chromeMock.__reset()
-    mockMatchMedia(false)
   })
 
-  it('默认值：theme=auto、openInNewTab=true、homeFolderId=null', async () => {
+  it('setLayout 持久化布局并更新 CSS 变量', async () => {
     const store = useSettingsStore()
     await store.init()
-    expect(store.theme).toBe('auto')
-    expect(store.openInNewTab).toBe(true)
-    expect(store.homeFolderId).toBeNull()
+    await store.setLayout({ cardWidth: 220, cardHeight: 56 })
+    expect(store.layout.cardWidth).toBe(220)
+    expect(chromeMock.__storage.sync.get('layout')).toEqual({
+      cardWidth: 220,
+      cardHeight: 56,
+      containerWidth: 85,
+    })
+    expect(document.documentElement.style.getPropertyValue('--lm-card-width')).toBe('220px')
+    expect(document.documentElement.style.getPropertyValue('--lm-card-height')).toBe('56px')
   })
 
-  it('init 读取持久化值', async () => {
-    chromeMock.__storage.sync.set('theme', 'dark')
-    chromeMock.__storage.sync.set('homeFolderId', '2')
-    chromeMock.__storage.sync.set('openInNewTab', false)
-
+  it('setSolidBg 切换为纯色模式，清空壁纸 id', async () => {
     const store = useSettingsStore()
     await store.init()
-    expect(store.theme).toBe('dark')
-    expect(store.homeFolderId).toBe('2')
-    expect(store.openInNewTab).toBe(false)
+    await store.setPresetWallpaper('preset-1', 'data:image/svg+xml,x')
+    await store.setSolidBg('gradient-sky')
+    expect(store.bgKind).toBe('solid')
+    expect(store.solidBg).toBe('gradient-sky')
+    expect(store.wallpaperId).toBeNull()
+    expect(document.documentElement.dataset.bg).toBe('gradient-sky')
   })
 
-  it('resolvedTheme：auto 模式跟随系统', async () => {
-    mockMatchMedia(true)
+  it('setPresetWallpaper 切换为壁纸模式，data-bg=wallpaper', async () => {
     const store = useSettingsStore()
     await store.init()
-    expect(store.theme).toBe('auto')
-    expect(store.resolvedTheme).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    await store.setPresetWallpaper('preset-2', 'data:image/svg+xml,y')
+    expect(store.bgKind).toBe('wallpaper')
+    expect(store.wallpaperId).toBe('preset-2')
+    expect(chromeMock.__storage.local.get('wallpaperDataUrl')).toBe('data:image/svg+xml,y')
+    expect(document.documentElement.dataset.bg).toBe('wallpaper')
   })
 
-  it('resolvedTheme：auto + 浅色系统 → light', async () => {
+  it('setUserWallpaper 把 dataURL 存入 storage.local', async () => {
     const store = useSettingsStore()
     await store.init()
-    expect(store.resolvedTheme).toBe('light')
-    expect(document.documentElement.dataset.theme).toBe('light')
+    await store.setUserWallpaper('data:image/jpeg,zzz')
+    expect(store.bgKind).toBe('wallpaper')
+    expect(store.wallpaperId).toMatch(/^user:\d+$/)
+    expect(chromeMock.__storage.local.get('wallpaperDataUrl')).toBe('data:image/jpeg,zzz')
   })
 
-  it('setTheme 持久化并应用到 data-theme', async () => {
+  it('init 读取持久化的布局', async () => {
+    chromeMock.__storage.sync.set('layout', { cardWidth: 180, cardHeight: 50, containerWidth: 90 })
     const store = useSettingsStore()
     await store.init()
-    await store.setTheme('dark')
-    expect(chromeMock.__storage.sync.get('theme')).toBe('dark')
-    expect(document.documentElement.dataset.theme).toBe('dark')
-  })
-
-  it('setHomeFolderId 持久化', async () => {
-    const store = useSettingsStore()
-    await store.init()
-    await store.setHomeFolderId('10')
-    expect(chromeMock.__storage.sync.get('homeFolderId')).toBe('10')
-  })
-
-  it('setOpenInNewTab 持久化', async () => {
-    const store = useSettingsStore()
-    await store.init()
-    await store.setOpenInNewTab(false)
-    expect(chromeMock.__storage.sync.get('openInNewTab')).toBe(false)
-  })
-
-  it('cycleTheme 在 light → dark → auto 间循环', async () => {
-    const store = useSettingsStore()
-    await store.init()
-    store.theme = 'light'
-    store.cycleTheme()
-    expect(store.theme).toBe('dark')
-    store.cycleTheme()
-    expect(store.theme).toBe('auto')
-    store.cycleTheme()
-    expect(store.theme).toBe('light')
+    expect(store.layout.cardWidth).toBe(180)
+    expect(store.layout.containerWidth).toBe(90)
   })
 })

@@ -276,8 +276,9 @@ async function onMenuSelect(key: string) {
 <template>
   <div
     ref="cardEl"
-    class="glass flex h-12 cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:ring-2 hover:ring-emerald-400/40"
+    class="glass flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:ring-2 hover:ring-emerald-400/40"
     :class="{ 'ring-2 ring-emerald-500/60 opacity-50': dragging, 'ring-2 ring-emerald-400': dropOver }"
+    style="height: var(--lm-card-height, 48px)"
     draggable="true"
     @contextmenu="onContextMenu"
     @mouseenter="isDir && !dragging && intent.enter()"

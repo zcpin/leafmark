@@ -20,7 +20,13 @@ const children = computed(() => bookmarks.currentChildren)
     <p class="text-xs text-slate-400 dark:text-slate-500">{{ t('emptyFolderHint') }}</p>
   </div>
 
-  <div v-else class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))">
+  <div
+    v-else
+    class="grid gap-4"
+    :style="{
+      gridTemplateColumns: `repeat(auto-fill, minmax(var(--lm-card-width, 200px), 1fr))`,
+    }"
+  >
     <BookmarkCard v-for="node in children" :key="node.id" :node="node" />
   </div>
 </template>
