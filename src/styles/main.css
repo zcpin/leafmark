@@ -40,3 +40,21 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+
+/* ------------------------------------------------------------------
+ * F5 渐变色板（设置面板「外观」区的预览色块）
+ * 注意：页面背景渐变定义在 App.vue 的 .lm-bg[data-bg=...]，
+ * 这里只是色块按钮自己的填充样式，两者同名但互不依赖
+ * ------------------------------------------------------------------ */
+.gradient-emerald {
+  background: linear-gradient(135deg, #34d399, #059669);
+}
+.gradient-sky {
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+}
+.gradient-sunset {
+  background: linear-gradient(135deg, #fb923c, #e11d48);
+}
+.gradient-slate {
+  background: linear-gradient(135deg, #94a3b8, #334155);
+}
