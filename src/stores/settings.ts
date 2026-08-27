@@ -43,6 +43,9 @@ export const useSettingsStore = defineStore('settings', () => {
   // —— 布局 F6 ——
   const layout = ref<LayoutSettings>({ ...DEFAULT_LAYOUT })
 
+  // —— 性能：关闭毛玻璃模糊（低性能设备降级，仅保留半透明底）——
+  const reduceEffects = ref(false)
+
   // —— 背景 F2/F3/F5 ——
   const bgKind = ref<BackgroundKind>('solid')
   /** 纯色/渐变背景的 CSS 类名（F5） */
@@ -69,6 +72,10 @@ export const useSettingsStore = defineStore('settings', () => {
     document.documentElement.dataset.theme = resolvedTheme.value
   }
 
+  function applyReduceEffects() {
+    document.documentElement.classList.toggle('reduce-effects', reduceEffects.value)
+  }
+
   function applyBackground() {
     const root = document.documentElement
     if (bgKind.value === 'wallpaper' && wallpaperDataUrl.value) {
@@ -83,11 +90,13 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(resolvedTheme, applyTheme)
   watch(layout, applyLayout, { deep: true })
   watch([bgKind, solidBg, wallpaperDataUrl], applyBackground)
+  watch(reduceEffects, applyReduceEffects)
 
   async function init() {
     theme.value = await storageGet<ThemeMode>('theme', 'auto')
     homeFolderId.value = await storageGet<string | null>('homeFolderId', null)
     openInNewTab.value = await storageGet('openInNewTab', true)
+    reduceEffects.value = await storageGet('reduceEffects', false)
     layout.value = { ...DEFAULT_LAYOUT, ...(await storageGet<Partial<LayoutSettings>>('layout', {})) }
     bgKind.value = await storageGet<BackgroundKind>('bgKind', 'solid')
     solidBg.value = await storageGet('solidBg', 'gradient-emerald')
@@ -105,6 +114,7 @@ export const useSettingsStore = defineStore('settings', () => {
       if (key === 'theme') theme.value = value as ThemeMode
       else if (key === 'homeFolderId') homeFolderId.value = value as string | null
       else if (key === 'openInNewTab') openInNewTab.value = value === true
+      else if (key === 'reduceEffects') reduceEffects.value = value === true
       else if (key === 'layout') layout.value = { ...DEFAULT_LAYOUT, ...(value as Partial<LayoutSettings>) }
       else if (key === 'bgKind') bgKind.value = value as BackgroundKind
       else if (key === 'solidBg') solidBg.value = value as string
@@ -141,6 +151,11 @@ export const useSettingsStore = defineStore('settings', () => {
   async function setOpenInNewTab(value: boolean) {
     openInNewTab.value = value
     await storageSet('openInNewTab', value)
+  }
+
+  async function setReduceEffects(value: boolean) {
+    reduceEffects.value = value
+    await storageSet('reduceEffects', value)
   }
 
   async function setLayout(partial: Partial<LayoutSettings>) {
@@ -182,6 +197,7 @@ export const useSettingsStore = defineStore('settings', () => {
     theme,
     homeFolderId,
     openInNewTab,
+    reduceEffects,
     layout,
     bgKind,
     solidBg,
@@ -193,6 +209,7 @@ export const useSettingsStore = defineStore('settings', () => {
     cycleTheme,
     setHomeFolderId,
     setOpenInNewTab,
+    setReduceEffects,
     setLayout,
     setSolidBg,
     setPresetWallpaper,

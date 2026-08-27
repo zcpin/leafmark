@@ -14,7 +14,9 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "icons": "node scripts/generate-icons.mjs",
+    "zip": "node scripts/zip-dist.mjs"
   },
   "dependencies": {
     "pinia": "^4.0.3",

@@ -91,6 +91,11 @@ const openInNewTab = computed({
   set: (v: boolean) => void settings.setOpenInNewTab(v),
 })
 
+const reduceEffects = computed({
+  get: () => settings.reduceEffects,
+  set: (v: boolean) => void settings.setReduceEffects(v),
+})
+
 const themeLabel = computed(() =>
   settings.theme === 'dark' ? t('themeDark') : settings.theme === 'light' ? t('themeLight') : t('themeAuto'),
 )
@@ -218,6 +223,10 @@ const themeLabel = computed(() =>
             <label class="glass flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-3">
               <span class="text-sm text-slate-700 dark:text-slate-200">{{ t('settingsOpenInNewTab') }}</span>
               <input v-model="openInNewTab" type="checkbox" class="size-4 accent-emerald-500" />
+            </label>
+            <label class="glass flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-3">
+              <span class="text-sm text-slate-700 dark:text-slate-200">{{ t('settingsReduceEffects') }}</span>
+              <input v-model="reduceEffects" type="checkbox" class="size-4 accent-emerald-500" />
             </label>
           </div>
         </div>
