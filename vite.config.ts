@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 // 构建方案：手动模式（Plan B，见 docs/03-实现计划.md 风险表）
 // - manifest.json 为 public/ 下静态文件，构建时原样复制到 dist/
@@ -20,6 +20,14 @@ export default defineConfig({
       input: {
         newtab: fileURLToPath(new URL('./src/newtab/index.html', import.meta.url)),
       },
+    },
+  },
+  test: {
+    environment: 'happy-dom',
+    setupFiles: ['tests/setup.ts'],
+    include: ['tests/**/*.spec.ts'],
+    coverage: {
+      include: ['src/lib/**', 'src/stores/**', 'src/composables/**'],
     },
   },
 })

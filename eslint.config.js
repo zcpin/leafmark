@@ -10,6 +10,13 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
+    files: ['**/*.vue'],
+    languageOptions: {
+      // <script lang="ts"> 需要 typescript 解析器
+      parserOptions: { parser: tseslint.parser },
+    },
+  },
+  {
     files: ['**/*.{ts,vue}'],
     languageOptions: {
       globals: { ...globals.browser },
