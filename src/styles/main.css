@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+
+/* 暗色变体绑定到 data-theme 属性（F1：浅/深/跟随系统由 JS 切换该属性） */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ------------------------------------------------------------------
+ * F8 毛玻璃设计令牌
+ * 浮起表面统一使用：卡片 .glass（轻模糊）/ 浮层 .glass-strong（重模糊）
+ * 性能约束：backdrop-filter 层数由分层策略控制，见 docs/03-实现计划.md
+ * ------------------------------------------------------------------ */
+.glass {
+  background-color: rgb(255 255 255 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgb(15 42 63 / 0.12);
+}
+
+.glass-strong {
+  background-color: rgb(255 255 255 / 0.78);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  box-shadow: 0 16px 48px rgb(15 42 63 / 0.18);
+}
+
+html[data-theme='dark'] .glass {
+  background-color: rgb(15 23 42 / 0.55);
+  border-color: rgb(255 255 255 / 0.1);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.35);
+}
+
+html[data-theme='dark'] .glass-strong {
+  background-color: rgb(15 23 42 / 0.72);
+  border-color: rgb(255 255 255 / 0.14);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
