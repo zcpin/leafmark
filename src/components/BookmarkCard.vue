@@ -1,6 +1,18 @@
 <script setup lang="ts">
-// 书签卡片：文件夹变体带 A9 悬停弹窗；书签变体按 G5 打开；右键菜单（A2/B1/B4）
-import { computed, ref, watch } from 'vue'
+// 书签卡片：主页面与 A9 弹出面板共用
+// - 文件夹变体：悬停 ~250ms 弹出「卡片网格面板」（与主页面页签样式一致，多列换行、无滚动条）
+// - 面板内文件夹卡片悬停继续级联（自引用递归），级联层在右侧展开
+// - 书签变体：点击按 G5 打开；右键菜单（A2/B1/B4）
+import {
+  computed,
+  inject,
+  nextTick,
+  onBeforeUnmount,
+  provide,
+  ref,
+  watch,
+  type InjectionKey,
+} from 'vue'
 
 import { useHoverIntent } from '@/composables/useHoverIntent'
 import { faviconUrl } from '@/lib/favicon'
@@ -13,8 +25,12 @@ import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
-import FolderPopup from './FolderPopup.vue'
 import Icon from './Icon.vue'
+
+/** 面板上下文：面板内的卡片打开书签 / 按 Esc / 滚动时，向上逐级关闭整链弹窗 */
+const POPUP_CHAIN: InjectionKey<() => void> = Symbol('popup-chain')
+/** 是否处于弹出面板内（级联层的展开方向为右侧） */
+const IN_POPUP: InjectionKey<boolean> = Symbol('in-popup')
 
 const props = defineProps<{ node: BookmarkNode }>()
 
@@ -23,8 +39,20 @@ const settings = useSettingsStore()
 const ui = useUiStore()
 
 const isDir = computed(() => isFolder(props.node))
+const children = computed(() => props.node.children ?? [])
+
 const cardEl = ref<HTMLElement>()
 const intent = useHoverIntent()
+
+// —— 面板上下文注入（对面板内的子卡片生效）——
+const closeChain = inject(POPUP_CHAIN, null)
+const inPopup = inject(IN_POPUP, false)
+
+provide(POPUP_CHAIN, () => {
+  intent.closeNow()
+  closeChain?.()
+})
+provide(IN_POPUP, true)
 
 // favicon：扩展环境走 _favicon；开发预览/加载失败回退首字母头像（零网络请求）
 const favFailed = ref(false)
@@ -40,13 +68,73 @@ const favSrc = computed(() =>
 const initial = computed(() => (props.node.title.trim().charAt(0) || '?').toUpperCase())
 
 function onOpenBookmark() {
-  if (props.node.url) openUrl(props.node.url, settings.openInNewTab)
+  if (!props.node.url) return
+  openUrl(props.node.url, settings.openInNewTab)
+  closeChain?.()
 }
 
 /** 触屏兜底（A9 规格）：无 hover 场景下单击文件夹立即弹出 */
 function onFolderClick() {
   if (!intent.isOpen.value) intent.openNow()
 }
+
+// —— A9 弹出面板定位：主页面卡片在下方展开，级联层在右侧；视口边缘翻转 ——
+const panelEl = ref<HTMLElement>()
+const panelPos = ref<Record<string, string>>({ visibility: 'hidden' })
+
+function positionPanel() {
+  const el = panelEl.value
+  const anchor = cardEl.value
+  if (!el || !anchor) return
+  const rect = anchor.getBoundingClientRect()
+  const { offsetWidth: w, offsetHeight: h } = el
+  const margin = 8
+
+  let x: number
+  let y: number
+  if (inPopup) {
+    x = rect.right + margin
+    y = rect.top - 4
+  } else {
+    x = rect.left
+    y = rect.bottom + margin
+  }
+  if (y + h > window.innerHeight - margin) y = Math.max(margin, rect.top - h - margin)
+  if (x + w > window.innerWidth - margin) {
+    x = inPopup ? Math.max(margin, rect.left - w - margin) : window.innerWidth - w - margin
+  }
+  if (x < margin) x = margin
+
+  panelPos.value = { left: `${x}px`, top: `${y}px`, visibility: 'visible' }
+}
+
+function onPanelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeChain?.()
+}
+
+function onPanelScroll() {
+  closeChain?.()
+}
+
+watch(
+  () => intent.isOpen.value,
+  async (open) => {
+    if (open) {
+      await nextTick()
+      positionPanel()
+      window.addEventListener('keydown', onPanelKeydown)
+      window.addEventListener('scroll', onPanelScroll, { capture: true, passive: true })
+    } else {
+      window.removeEventListener('keydown', onPanelKeydown)
+      window.removeEventListener('scroll', onPanelScroll, true)
+    }
+  },
+)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onPanelKeydown)
+  window.removeEventListener('scroll', onPanelScroll, true)
+})
 
 // —— 右键菜单 ——
 const menu = ref<{ x: number; y: number } | null>(null)
@@ -157,21 +245,39 @@ async function onMenuSelect(key: string) {
       >
         {{ initial }}
       </span>
-      <span class="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200" :title="props.node.title">
+      <span
+        class="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200"
+        :title="props.node.title"
+      >
         {{ props.node.title }}
       </span>
     </template>
 
-    <!-- A9 目录悬停弹窗 -->
+    <!-- A9 弹出面板：卡片网格（与主页面页签一致，多列换行、无滚动条），自引用实现级联 -->
     <Teleport to="body">
-      <FolderPopup
+      <div
         v-if="isDir && intent.isOpen.value && cardEl"
-        :anchor="cardEl"
-        :folder="props.node"
-        @enter="intent.enter"
-        @leave="intent.leave"
-        @close="intent.closeNow"
-      />
+        ref="panelEl"
+        class="glass-strong fixed z-40 rounded-2xl p-3"
+        :style="panelPos"
+        @mouseenter="intent.enter"
+        @mouseleave="intent.leave"
+        @contextmenu.prevent
+      >
+        <div
+          v-if="children.length === 0"
+          class="px-8 py-6 text-center text-xs text-slate-400 dark:text-slate-500"
+        >
+          {{ t('emptyFolder') }}
+        </div>
+        <div
+          v-else
+          class="grid gap-2.5"
+          style="width: min(520px, calc(100vw - 48px)); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+        >
+          <BookmarkCard v-for="child in children" :key="child.id" :node="child" />
+        </div>
+      </div>
     </Teleport>
 
     <!-- 右键菜单 -->

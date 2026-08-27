@@ -1,14 +1,14 @@
 <script setup lang="ts">
-// 新标签页布局：侧栏树 + 主区（面包屑 / 主题切换 / 网格）+ 全局对话框
+// 新标签页布局：主区（面包屑 / 主题切换 / 网格）+ 全局对话框
+// （2026-08-27 修订：移除左侧侧边栏，导航由 面包屑 + 悬停级联 + 右键设为主页 承担）
 import { computed, onMounted } from 'vue'
 
 import BookmarkGrid from '@/components/BookmarkGrid.vue'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EditBookmarkDialog from '@/components/EditBookmarkDialog.vue'
-import FolderTree from '@/components/FolderTree.vue'
-import ToastStack from '@/components/ToastStack.vue'
 import Icon, { type IconName } from '@/components/Icon.vue'
+import ToastStack from '@/components/ToastStack.vue'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
@@ -26,7 +26,11 @@ const themeIcon = computed<IconName>(() =>
 )
 
 const themeTitle = computed(() =>
-  settings.theme === 'dark' ? t('themeDark') : settings.theme === 'light' ? t('themeLight') : t('themeAuto'),
+  settings.theme === 'dark'
+    ? t('themeDark')
+    : settings.theme === 'light'
+      ? t('themeLight')
+      : t('themeAuto'),
 )
 </script>
 
@@ -34,25 +38,16 @@ const themeTitle = computed(() =>
   <div
     class="flex h-screen overflow-hidden bg-gradient-to-br from-sky-100 via-emerald-50 to-slate-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800"
   >
-    <!-- 侧栏：书签树 -->
-    <aside class="glass m-3 mr-0 flex w-60 shrink-0 flex-col overflow-hidden rounded-2xl">
-      <div class="border-b border-white/40 px-4 py-3.5 dark:border-white/10">
-        <div class="flex items-center gap-2">
-          <span class="text-lg">🍃</span>
-          <span class="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-            {{ t('appName') }}
-          </span>
-        </div>
-        <p class="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">{{ t('tagline') }}</p>
-      </div>
-      <div class="flex-1 overflow-y-auto">
-        <FolderTree />
-      </div>
-    </aside>
-
     <!-- 主区 -->
     <main class="glass m-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
       <header class="flex items-center gap-2 border-b border-white/40 px-4 py-2.5 dark:border-white/10">
+        <div class="flex shrink-0 items-center gap-1.5">
+          <span class="text-base">🍃</span>
+          <span class="hidden text-sm font-semibold tracking-wide text-slate-700 md:inline dark:text-slate-200">
+            {{ t('appName') }}
+          </span>
+        </div>
+        <div class="mx-1 h-4 w-px shrink-0 bg-slate-400/30" />
         <Breadcrumb class="min-w-0 flex-1" />
         <button
           type="button"

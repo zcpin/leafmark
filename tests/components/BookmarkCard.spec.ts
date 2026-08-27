@@ -52,6 +52,9 @@ describe('BookmarkCard', () => {
     expect(popup!.textContent).toContain('GitHub')
     expect(popup!.textContent).toContain('MDN')
     expect(popup!.textContent).toContain('前端')
+    // 面板内页签与主页面卡片同款（.glass 卡片），且无滚动条
+    expect(popup!.querySelectorAll('.glass').length).toBe(3)
+    expect(popup!.className).not.toContain('overflow')
     vi.useRealTimers()
     wrapper.unmount()
   })
@@ -72,20 +75,27 @@ describe('BookmarkCard', () => {
     wrapper.unmount()
   })
 
-  it('A9 级联：弹窗内悬停子文件夹 250ms 后展开下一层', async () => {
+  it('A9 级联：面板内悬停子文件夹卡片 250ms 后展开下一层（同款网格面板）', async () => {
     vi.useFakeTimers()
     const wrapper = mount(BookmarkCard, { props: { node: devFolder }, attachTo: document.body })
     await wrapper.trigger('mouseenter')
     await vi.advanceTimersByTimeAsync(250)
 
     const popup = document.body.querySelector('.glass-strong') as HTMLElement
-    const folderRow = popup.querySelector('[data-folder-id="102"]') as HTMLElement
-    folderRow.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+    const folderCard = Array.from(popup.querySelectorAll('.glass')).find((el) =>
+      el.textContent?.includes('前端'),
+    ) as HTMLElement
+    expect(folderCard).toBeDefined()
+    folderCard.dispatchEvent(new MouseEvent('mouseenter'))
+
     await vi.advanceTimersByTimeAsync(249)
     expect(document.body.querySelectorAll('.glass-strong').length).toBe(1)
     await vi.advanceTimersByTimeAsync(1)
-    expect(document.body.querySelectorAll('.glass-strong').length).toBe(2)
-    expect(document.body.textContent).toContain('Vue')
+    const panels = document.body.querySelectorAll('.glass-strong')
+    expect(panels.length).toBe(2)
+    expect(panels[1]!.textContent).toContain('Vue')
+    // 级联面板内页签同样为主页面卡片样式
+    expect(panels[1]!.querySelectorAll('.glass').length).toBe(1)
 
     vi.useRealTimers()
     wrapper.unmount()
