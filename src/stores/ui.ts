@@ -1,5 +1,5 @@
-// UI 全局状态：确认对话框 / 编辑对话框 / Toast
-// 组件（ConfirmDialog / EditBookmarkDialog / ToastStack）挂在 App 根部消费
+// UI 全局状态：确认对话框 / 编辑对话框 / 二维码对话框 / Toast
+// 组件（ConfirmDialog / EditBookmarkDialog / QrCodeDialog / ToastStack）挂在 App 根部消费
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
@@ -32,6 +32,12 @@ export const useUiStore = defineStore('ui', () => {
   const editVisible = ref(false)
   const editState = ref<EditState | null>(null)
   let editResolver: ((value: EditResult | null) => void) | null = null
+
+  // —— 二维码对话框（B2）——
+  const qrVisible = ref(false)
+  const qrUrl = ref('')
+  const qrTitle = ref('')
+  let qrResolver: (() => void) | null = null
 
   const toasts = ref<{ id: number; message: string }[]>([])
 
@@ -66,6 +72,22 @@ export const useUiStore = defineStore('ui', () => {
     editState.value = null
   }
 
+  /** 弹出二维码框（B2），resolve 在对话框关闭时 */
+  function openQr(url: string, title: string): Promise<void> {
+    qrUrl.value = url
+    qrTitle.value = title
+    qrVisible.value = true
+    return new Promise((resolve) => {
+      qrResolver = resolve
+    })
+  }
+
+  function resolveQr() {
+    qrVisible.value = false
+    qrResolver?.()
+    qrResolver = null
+  }
+
   /** 轻提示（复制成功等），2.5s 自动消失 */
   function toast(message: string) {
     const id = ++seq
@@ -80,11 +102,16 @@ export const useUiStore = defineStore('ui', () => {
     confirmOptions,
     editVisible,
     editState,
+    qrVisible,
+    qrUrl,
+    qrTitle,
     toasts,
     confirm,
     resolveConfirm,
     openEdit,
     resolveEdit,
+    openQr,
+    resolveQr,
     toast,
   }
 })

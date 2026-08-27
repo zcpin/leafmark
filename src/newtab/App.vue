@@ -8,6 +8,7 @@ import Breadcrumb from '@/components/Breadcrumb.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EditBookmarkDialog from '@/components/EditBookmarkDialog.vue'
 import Icon, { type IconName } from '@/components/Icon.vue'
+import QrCodeDialog from '@/components/QrCodeDialog.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -88,6 +89,7 @@ const themeTitle = computed(() =>
     <!-- 全局对话框 / 轻提示 -->
     <ConfirmDialog />
     <EditBookmarkDialog />
+    <QrCodeDialog />
     <ToastStack />
   </div>
 </template>

@@ -13,6 +13,13 @@ import { findNode, getPath } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useSettingsStore } from './settings'
 
+/** 递归收集文件夹下全部书签的 URL（含嵌套子文件夹） */
+function collectUrls(node: BookmarkNode | undefined): string[] {
+  if (!node) return []
+  if (node.url) return [node.url]
+  return (node.children ?? []).flatMap((child) => collectUrls(child))
+}
+
 export const useBookmarksStore = defineStore('bookmarks', () => {
   const tree = ref<BookmarkNode[]>([])
   const loading = ref(false)
@@ -71,6 +78,11 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     await load()
   }
 
+  /** 收集文件夹下全部书签 URL（B3 批量打开用） */
+  function collectFolderUrls(folderId: string): string[] {
+    return collectUrls(findNode(tree.value, folderId))
+  }
+
   function dispose() {
     unsubEvents?.()
     unsubEvents = null
@@ -90,6 +102,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     updateBookmark,
     removeBookmark,
     moveBookmark,
+    collectFolderUrls,
     dispose,
   }
 })

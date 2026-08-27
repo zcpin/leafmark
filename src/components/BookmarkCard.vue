@@ -17,7 +17,7 @@ import {
 import { useHoverIntent } from '@/composables/useHoverIntent'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
-import { openUrl } from '@/lib/tabs'
+import { openAllInGroup, openUrl } from '@/lib/tabs'
 import { isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -76,6 +76,59 @@ function onOpenBookmark() {
 /** 触屏兜底（A9 规格）：无 hover 场景下单击文件夹立即弹出 */
 function onFolderClick() {
   if (!intent.isOpen.value) intent.openNow()
+}
+
+// —— A4 拖拽排序（HTML5 DnD，原生）——
+// 拖拽进行中抑制悬停弹窗触发（A4 × A9 互斥）
+const dragging = ref(false)
+const dropOver = ref(false)
+
+function onDragStart(e: DragEvent) {
+  dragging.value = true
+  intent.closeNow()
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('text/plain', props.node.id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function onDragEnd() {
+  dragging.value = false
+  dropOver.value = false
+}
+
+function onDragOver(e: DragEvent) {
+  // 允许 drop
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dropOver.value = true
+}
+
+function onDragLeave() {
+  dropOver.value = false
+}
+
+/** 落在卡片上：
+ *  - 落在文件夹卡片 → 移入该文件夹（index 0）
+ *  - 落在书签卡片 → 移到目标之后（目标父级的 index+1）
+ *  落点与源位置相同则跳过写回（isSamePosition 由 store 层的 load 兜底，这里简化判断）
+ */
+async function onDrop(e: DragEvent) {
+  e.preventDefault()
+  dropOver.value = false
+  const sourceId = e.dataTransfer?.getData('text/plain')
+  if (!sourceId || sourceId === props.node.id) return
+
+  if (isDir.value) {
+    // 进入文件夹
+    await bookmarks.moveBookmark(sourceId, props.node.id, 0)
+  } else {
+    // 同级重排：移到目标在父级中的位置之后
+    const parent = props.node.parentId ?? '1'
+    const siblings = bookmarks.currentChildren
+    const targetIndex = siblings.findIndex((n) => n.id === props.node.id)
+    await bookmarks.moveBookmark(sourceId, parent, targetIndex + 1)
+  }
 }
 
 // —— A9 弹出面板定位：主页面卡片在下方展开，级联层在右侧；视口边缘翻转 ——
@@ -149,6 +202,7 @@ const menuItems = computed<MenuItem[]>(() =>
   isDir.value
     ? [
         { key: 'home', label: t('setAsHome'), icon: 'home' },
+        { key: 'openAll', label: t('openAll'), icon: 'externalLink' },
         { key: 'edit', label: t('edit'), icon: 'edit' },
         { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
       ]
@@ -157,6 +211,7 @@ const menuItems = computed<MenuItem[]>(() =>
           ? { key: 'openCurrent', label: t('openInCurrentTab'), icon: 'externalLink' }
           : { key: 'openNew', label: t('openInNewTab'), icon: 'externalLink' },
         { key: 'copy', label: t('copyUrl'), icon: 'copy' },
+        { key: 'qr', label: t('qrCode'), icon: 'externalLink' },
         { key: 'edit', label: t('edit'), icon: 'edit' },
         { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
       ],
@@ -169,6 +224,12 @@ async function onMenuSelect(key: string) {
   if (key === 'openNew' && node.url) return openUrl(node.url, true)
   if (key === 'openCurrent' && node.url) return openUrl(node.url, false)
 
+  if (key === 'openAll' && isDir.value) {
+    const urls = bookmarks.collectFolderUrls(node.id)
+    await openAllInGroup(urls, node.title)
+    return
+  }
+
   if (key === 'copy') {
     try {
       await navigator.clipboard.writeText(node.url ?? '')
@@ -176,6 +237,11 @@ async function onMenuSelect(key: string) {
     } catch {
       ui.toast(t('copyFailed'))
     }
+    return
+  }
+
+  if (key === 'qr' && node.url) {
+    await ui.openQr(node.url, node.title)
     return
   }
 
@@ -211,10 +277,17 @@ async function onMenuSelect(key: string) {
   <div
     ref="cardEl"
     class="glass flex h-12 cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:ring-2 hover:ring-emerald-400/40"
+    :class="{ 'ring-2 ring-emerald-500/60 opacity-50': dragging, 'ring-2 ring-emerald-400': dropOver }"
+    draggable="true"
     @contextmenu="onContextMenu"
-    @mouseenter="isDir && intent.enter()"
+    @mouseenter="isDir && !dragging && intent.enter()"
     @mouseleave="isDir && intent.leave()"
     @click="isDir ? onFolderClick() : onOpenBookmark()"
+    @dragstart="onDragStart"
+    @dragend="onDragEnd"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <!-- 文件夹 -->
     <template v-if="isDir">

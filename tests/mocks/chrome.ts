@@ -141,6 +141,44 @@ function makeChrome() {
     }
   }
 
+  // —— 标签页 + 标签组 ——
+  let tabSeq = 0
+  const tabGroupStore = new Map<number, { title?: string; color?: string }>()
+
+  function makeTabs() {
+    const tabs = {
+      create: vi.fn(
+        (opts: { url: string; active?: boolean }, cb?: (tab: { id: number }) => void) => {
+          const id = ++tabSeq
+          cb?.({ id })
+          return Promise.resolve({ id })
+        },
+      ),
+      group: vi.fn((opts: { tabIds: number[] }, cb?: (groupId: number) => void) => {
+        const groupId = tabSeq + 1000
+        cb?.(groupId)
+        return Promise.resolve(groupId)
+      }),
+    }
+    const tabGroups = {
+      update: vi.fn(
+        (
+          groupId: number,
+          props: { title?: string; color?: string },
+          cb?: (group: unknown) => void,
+        ) => {
+          tabGroupStore.set(groupId, { ...tabGroupStore.get(groupId), ...props })
+          cb?.({ groupId, ...props })
+          return Promise.resolve({ groupId, ...props })
+        },
+      ),
+      __get: (groupId: number) => tabGroupStore.get(groupId),
+    }
+    return { tabs, tabGroups }
+  }
+
+  const { tabs, tabGroups } = makeTabs()
+
   const chromeMock = {
     bookmarks,
     storage: {
@@ -148,14 +186,8 @@ function makeChrome() {
       local: makeArea('local'),
       onChanged: storageChanged,
     },
-    tabs: {
-      create: vi.fn(
-        (opts: { url: string; active?: boolean }, cb?: (tab: { id: number }) => void) => {
-          cb?.({ id: 1 })
-          return Promise.resolve({ id: 1 })
-        },
-      ),
-    },
+    tabs,
+    tabGroups,
     runtime: {
       id: 'test-extension-id',
       lastError: null as { message: string } | null,
@@ -172,6 +204,8 @@ function makeChrome() {
       storageState.sync.clear()
       storageState.local.clear()
       chromeMock.runtime.lastError = null
+      tabSeq = 0
+      tabGroupStore.clear()
       Object.values(bookmarkEvents).forEach((e) => e.__clear())
       storageChanged.__clear()
       vi.clearAllMocks()
