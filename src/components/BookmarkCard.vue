@@ -276,7 +276,7 @@ async function onMenuSelect(key: string) {
 <template>
   <div
     ref="cardEl"
-    class="glass bookmark-card flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:ring-2 hover:ring-emerald-400/40"
+    class="glass bookmark-card group flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:ring-2 hover:ring-emerald-400/40"
     :class="{ 'ring-2 ring-emerald-500/60 opacity-50': dragging, 'ring-2 ring-emerald-400': dropOver }"
     style="height: var(--lm-card-height, 48px)"
     draggable="true"

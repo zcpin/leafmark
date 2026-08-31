@@ -45,6 +45,8 @@ const messages = {
     settingsReduceEffects: 'Reduce visual effects (disable blur)',
     dropToEnd: 'Move to end',
     settings: 'Settings',
+    bookmarksCount: '{n} bookmarks',
+    openAllHint: 'Right-click a folder → Open all',
     appearance: 'Appearance',
     layout: 'Layout',
     general: 'General',
@@ -114,6 +116,8 @@ const messages = {
     settingsReduceEffects: '减弱视觉效果（关闭毛玻璃模糊）',
     dropToEnd: '移到末尾',
     settings: '设置',
+    bookmarksCount: '{n} 个书签',
+    openAllHint: '右键文件夹 → 全部打开',
     appearance: '外观',
     layout: '布局',
     general: '通用',
@@ -146,7 +150,8 @@ const messages = {
 export type MessageKey = keyof (typeof messages)['en']
 type Locale = keyof typeof messages
 
-function uiLocale(): Locale {
+/** 当前 UI 语言代码（'zh_CN' | 'en'）——Clock 等组件复用 */
+export function uiLocale(): Locale {
   const raw =
     typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage
       ? chrome.i18n.getUILanguage()
@@ -154,7 +159,9 @@ function uiLocale(): Locale {
   return raw.toLowerCase().startsWith('zh') ? 'zh_CN' : 'en'
 }
 
-export function t(key: MessageKey): string {
+export function t(key: MessageKey, params?: Record<string, string | number>): string {
   const locale = uiLocale()
-  return messages[locale][key] ?? messages.en[key] ?? key
+  const raw = messages[locale][key] ?? messages.en[key] ?? key
+  if (!params) return raw
+  return raw.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name] ?? ''))
 }
