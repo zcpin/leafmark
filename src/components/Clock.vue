@@ -48,8 +48,8 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <template>
-  <div class="glass flex flex-col items-center rounded-3xl px-10 py-6 text-center">
-    <div class="text-6xl font-bold leading-none tabular-nums text-slate-800 dark:text-slate-100">
+  <div class="glass flex flex-col items-center rounded-3xl px-12 py-6 text-center">
+    <div class="text-7xl font-bold leading-none tabular-nums tracking-tight text-slate-800 dark:text-slate-100">
       {{ timeText }}
     </div>
     <div class="mt-3 text-base text-slate-600 dark:text-slate-300">{{ dateText }}</div>

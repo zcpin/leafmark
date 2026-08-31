@@ -89,43 +89,45 @@ const greeting = computed(() => t(greetingKey()))
       </div>
     </header>
 
-    <!-- 滚动内容区：时钟 + 书签玻璃卡 + 底部统计（整列居中） -->
-    <div class="flex min-h-0 flex-1 flex-col items-center overflow-y-auto">
-      <!-- 时钟 + 问候 -->
-      <div class="flex shrink-0 flex-col items-center px-6 pt-6">
+    <!-- 滚动内容区：时钟 + 书签玻璃卡 + 底部统计（整列居中，绝不让页面出现滚动条） -->
+    <div class="flex min-h-0 flex-1 flex-col items-center px-6 pt-6">
+      <!-- 时钟 + 问候（常驻，不参与滚动） -->
+      <div class="flex shrink-0 flex-col items-center">
         <Clock />
         <p class="mt-4 text-base text-slate-600 dark:text-slate-300">{{ greeting }}</p>
       </div>
 
-      <!-- 书签玻璃卡（固定宽度，内容自适应高度） -->
+      <!-- 书签玻璃卡：占据剩余空间，仅书签超量时内部滚动 -->
       <div
-        class="glass mt-6 mb-4 flex w-full max-w-3xl flex-col rounded-3xl px-6 py-5"
+        class="glass mt-6 mb-3 flex min-h-0 w-full flex-1 flex-col rounded-3xl px-6 py-5"
         style="width: min(900px, calc(100vw - 3rem))"
       >
-        <div
-          v-if="bookmarks.loading && bookmarks.tree.length === 0"
-          class="py-16 text-center text-sm text-slate-400"
-        >
-          {{ t('loading') }}
-        </div>
-        <div
-          v-else-if="bookmarks.error && bookmarks.tree.length === 0"
-          class="flex flex-col items-center gap-3 py-16"
-        >
-          <p class="text-sm text-slate-500">{{ t('loadError') }}</p>
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
-            @click="bookmarks.load()"
+        <div class="bookmark-scroll min-h-0 flex-1 overflow-y-auto">
+          <div
+            v-if="bookmarks.loading && bookmarks.tree.length === 0"
+            class="py-16 text-center text-sm text-slate-400"
           >
-            {{ t('retry') }}
-          </button>
+            {{ t('loading') }}
+          </div>
+          <div
+            v-else-if="bookmarks.error && bookmarks.tree.length === 0"
+            class="flex flex-col items-center gap-3 py-16"
+          >
+            <p class="text-sm text-slate-500">{{ t('loadError') }}</p>
+            <button
+              type="button"
+              class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+              @click="bookmarks.load()"
+            >
+              {{ t('retry') }}
+            </button>
+          </div>
+          <BookmarkGrid v-else />
         </div>
-        <BookmarkGrid v-else />
       </div>
 
       <!-- 底部统计（淡色，无网络依赖） -->
-      <footer class="shrink-0 pb-6 text-xs text-slate-400 dark:text-slate-500">
+      <footer class="mb-3 shrink-0 text-xs text-slate-400 dark:text-slate-500">
         {{ t('bookmarksCount', { n: stats.total }) }} · {{ t('openAllHint') }}
       </footer>
     </div>
