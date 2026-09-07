@@ -45,10 +45,10 @@ async function onGridDrop(e: DragEvent) {
 
   <div
     v-else
-    class="grid gap-4"
+    class="grid gap-3"
     :class="{ 'rounded-2xl ring-2 ring-dashed ring-emerald-400/50': dropOverGrid }"
     :style="{
-      gridTemplateColumns: `repeat(auto-fill, minmax(var(--lm-card-width, 200px), 1fr))`,
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, var(--lm-card-width, 200px)), 1fr))`,
     }"
     @dragover="onGridDragOver"
     @dragleave="dropOverGrid = false"

@@ -15,9 +15,11 @@ import {
 } from 'vue'
 
 import { useHoverIntent } from '@/composables/useHoverIntent'
+import { executeBookmarkAction } from '@/lib/bookmark-actions'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
 import { openAllInGroup, openUrl } from '@/lib/tabs'
+import { computePopupPosition } from '@/lib/popup-position'
 import { isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -143,22 +145,14 @@ function positionPanel() {
   const { offsetWidth: w, offsetHeight: h } = el
   const margin = 8
 
-  let x: number
-  let y: number
-  if (inPopup) {
-    x = rect.right + margin
-    y = rect.top - 4
-  } else {
-    x = rect.left
-    y = rect.bottom + margin
-  }
-  if (y + h > window.innerHeight - margin) y = Math.max(margin, rect.top - h - margin)
-  if (x + w > window.innerWidth - margin) {
-    x = inPopup ? Math.max(margin, rect.left - w - margin) : window.innerWidth - w - margin
-  }
-  if (x < margin) x = margin
-
-  panelPos.value = { left: `${x}px`, top: `${y}px`, visibility: 'visible' }
+  const { left, top } = computePopupPosition(
+    rect,
+    { width: w, height: h },
+    { width: window.innerWidth, height: window.innerHeight },
+    inPopup,
+    margin,
+  )
+  panelPos.value = { left: `${left}px`, top: `${top}px`, visibility: 'visible' }
 }
 
 function onPanelKeydown(e: KeyboardEvent) {
@@ -201,7 +195,9 @@ function onContextMenu(e: MouseEvent) {
 const menuItems = computed<MenuItem[]>(() =>
   isDir.value
     ? [
-        { key: 'home', label: t('setAsHome'), icon: 'home' },
+        settings.homeFolderId === props.node.id
+          ? { key: 'resetHome', label: t('resetHome'), icon: 'home' }
+          : { key: 'home', label: t('setAsHome'), icon: 'home' },
         { key: 'openAll', label: t('openAll'), icon: 'externalLink' },
         { key: 'edit', label: t('edit'), icon: 'edit' },
         { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
@@ -219,57 +215,16 @@ const menuItems = computed<MenuItem[]>(() =>
 
 async function onMenuSelect(key: string) {
   menu.value = null
-  const node = props.node
-
-  if (key === 'openNew' && node.url) return openUrl(node.url, true)
-  if (key === 'openCurrent' && node.url) return openUrl(node.url, false)
-
-  if (key === 'openAll' && isDir.value) {
-    const urls = bookmarks.collectFolderUrls(node.id)
-    await openAllInGroup(urls, node.title)
-    return
-  }
-
-  if (key === 'copy') {
-    try {
-      await navigator.clipboard.writeText(node.url ?? '')
-      ui.toast(t('copied'))
-    } catch {
-      ui.toast(t('copyFailed'))
-    }
-    return
-  }
-
-  if (key === 'qr' && node.url) {
-    await ui.openQr(node.url, node.title)
-    return
-  }
-
-  if (key === 'home') {
-    await settings.setHomeFolderId(node.id)
-    bookmarks.setViewFolder(node.id)
-    ui.toast(t('homeSet'))
-    return
-  }
-
-  if (key === 'edit') {
-    const result = await ui.openEdit({
-      id: node.id,
-      title: node.title,
-      url: node.url,
-      isFolder: isDir.value,
-    })
-    if (result) await bookmarks.updateBookmark(node.id, result)
-    return
-  }
-
-  if (key === 'delete') {
-    const confirmed = await ui.confirm({
-      title: isDir.value ? t('deleteFolderTitle') : t('deleteBookmarkTitle'),
-      message: isDir.value ? t('deleteFolderMessage') : t('deleteBookmarkMessage'),
-    })
-    if (confirmed) await bookmarks.removeBookmark(node.id, isDir.value)
-  }
+  await executeBookmarkAction(key, {
+    node: props.node,
+    isFolder: isDir.value,
+    settings,
+    bookmarks,
+    ui,
+    openUrl,
+    openAllInGroup,
+    clipboard: navigator.clipboard,
+  })
 }
 </script>
 
@@ -277,7 +232,10 @@ async function onMenuSelect(key: string) {
   <div
     ref="cardEl"
     class="glass bookmark-card group flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:ring-2 hover:ring-emerald-400/40"
-    :class="{ 'ring-2 ring-emerald-500/60 opacity-50': dragging, 'ring-2 ring-emerald-400': dropOver }"
+    :class="{
+      'ring-2 ring-emerald-500/60 opacity-50': dragging,
+      'ring-2 ring-emerald-400': dropOver,
+    }"
     style="height: var(--lm-card-height, 48px)"
     draggable="true"
     @contextmenu="onContextMenu"
@@ -347,7 +305,10 @@ async function onMenuSelect(key: string) {
         <div
           v-else
           class="grid gap-2.5"
-          style="width: min(520px, calc(100vw - 48px)); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+          style="
+            width: min(520px, calc(100vw - 48px));
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          "
         >
           <BookmarkCard v-for="child in children" :key="child.id" :node="child" />
         </div>

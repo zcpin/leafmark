@@ -21,10 +21,7 @@ describe('tabs（B3 批量打开 + 分组）', () => {
 
   it('多个 URL → 调用 tabs.group + tabGroups.update 设置组名颜色', async () => {
     await openAllInGroup(['https://a.com', 'https://b.com'], '开发')
-    expect(chromeMock.tabs.group).toHaveBeenCalledWith(
-      { tabIds: [1, 2] },
-      expect.any(Function),
-    )
+    expect(chromeMock.tabs.group).toHaveBeenCalledWith({ tabIds: [1, 2] }, expect.any(Function))
     expect(chromeMock.tabGroups.update).toHaveBeenCalledWith(
       1002,
       { title: '开发', color: 'cyan' },
@@ -51,7 +48,10 @@ describe('tabs（B3 批量打开 + 分组）', () => {
 
   it('openUrl 新标签页模式调用 tabs.create', () => {
     openUrl('https://a.com', true)
-    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: 'https://a.com', active: true })
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith(
+      { url: 'https://a.com', active: true },
+      expect.any(Function),
+    )
   })
 
   it('openUrl 当前页模式调用 location.assign', () => {
@@ -59,5 +59,17 @@ describe('tabs（B3 批量打开 + 分组）', () => {
     openUrl('https://a.com', false)
     expect(spy).toHaveBeenCalledWith('https://a.com')
     spy.mockRestore()
+  })
+
+  it('批量创建标签页遇到 runtime.lastError 时跳过失败项，不进入空分组', async () => {
+    chromeMock.runtime.lastError = { message: 'tabs unavailable' }
+    try {
+      await expect(
+        openAllInGroup(['https://a.com', 'https://b.com'], '开发'),
+      ).resolves.toBeUndefined()
+      expect(chromeMock.tabs.group).not.toHaveBeenCalled()
+    } finally {
+      chromeMock.runtime.lastError = null
+    }
   })
 })

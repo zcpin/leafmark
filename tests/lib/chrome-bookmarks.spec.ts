@@ -41,7 +41,12 @@ describe('chrome-bookmarks', () => {
 
   it('moveBookmark 移动节点到新位置', async () => {
     await moveBookmark('11', { parentId: '10', index: 0 })
-    expect(chromeMock.bookmarks.__find('10')?.children?.map((c) => c.id)).toEqual(['11', '100', '101', '102'])
+    expect(chromeMock.bookmarks.__find('10')?.children?.map((c) => c.id)).toEqual([
+      '11',
+      '100',
+      '101',
+      '102',
+    ])
   })
 
   it('onBookmarksChanged 聚合四类书签事件', async () => {
@@ -60,5 +65,14 @@ describe('chrome-bookmarks', () => {
     off()
     await updateBookmark('100', { title: 'x' })
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('书签调用的 runtime.lastError 会拒绝 Promise', async () => {
+    chromeMock.runtime.lastError = { message: 'bookmarks unavailable' }
+    try {
+      await expect(getTree()).rejects.toThrow('bookmarks unavailable')
+    } finally {
+      chromeMock.runtime.lastError = null
+    }
   })
 })

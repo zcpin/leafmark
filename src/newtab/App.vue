@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// 新标签页布局（2026-08-31 重构）：居中浮岛
-// 全屏只渲染背景（壁纸/渐变）；时钟浮岛 + 书签玻璃卡 + 底部统计
+// 新标签页：紧凑时钟、随内容收拢的书签浮岛、底部年度进度
+// 全屏背景（壁纸/渐变）；书签超量时仅网格内部滚动
 // 顶部工具行：面包屑（当前文件夹路径）/ 主题 / 设置
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import BookmarkGrid from '@/components/BookmarkGrid.vue'
 import Breadcrumb from '@/components/Breadcrumb.vue'
@@ -14,6 +14,8 @@ import OnboardingOverlay from '@/components/OnboardingOverlay.vue'
 import QrCodeDialog from '@/components/QrCodeDialog.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ToastStack from '@/components/ToastStack.vue'
+import YearProgress from '@/components/YearProgress.vue'
+import { useNow } from '@/composables/useNow'
 import { greetingKey } from '@/lib/greeting'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -23,6 +25,7 @@ import { useStatsStore } from '@/stores/stats'
 const settings = useSettingsStore()
 const bookmarks = useBookmarksStore()
 const stats = useStatsStore()
+const now = useNow()
 
 const settingsPanel = ref<{ show: () => void } | null>(null)
 
@@ -31,12 +34,13 @@ onMounted(() => {
   void bookmarks.init()
 })
 
+onBeforeUnmount(() => {
+  settings.dispose()
+  bookmarks.dispose()
+})
+
 const themeIcon = computed<IconName>(() =>
-  settings.theme === 'dark'
-    ? 'moon'
-    : settings.theme === 'light'
-      ? 'sun'
-      : 'monitor',
+  settings.theme === 'dark' ? 'moon' : settings.theme === 'light' ? 'sun' : 'monitor',
 )
 
 const themeTitle = computed(() =>
@@ -47,7 +51,7 @@ const themeTitle = computed(() =>
       : t('themeAuto'),
 )
 
-const greeting = computed(() => t(greetingKey()))
+const greeting = computed(() => t(greetingKey(now.value)))
 </script>
 
 <template>
@@ -56,15 +60,13 @@ const greeting = computed(() => t(greetingKey()))
     :data-bg="settings.bgKind === 'wallpaper' ? 'wallpaper' : settings.solidBg"
   >
     <!-- 顶部工具行（不盖玻璃） -->
-    <header
-      class="flex shrink-0 items-center gap-2 px-5 py-3 text-slate-500 dark:text-slate-400"
-    >
+    <header class="flex shrink-0 items-center gap-2 px-5 py-3 text-slate-500 dark:text-slate-400">
       <div class="flex items-center gap-2">
         <span class="text-lg">🍃</span>
         <span
           class="hidden text-sm font-semibold tracking-wide text-slate-700 md:inline dark:text-slate-200"
         >
-          {{ t('appName') }}
+          {{ t('newTab') }}
         </span>
       </div>
       <div class="mx-2 h-4 w-px bg-slate-400/30" />
@@ -82,25 +84,26 @@ const greeting = computed(() => t(greetingKey()))
           type="button"
           class="rounded-lg p-2 transition-colors hover:bg-slate-500/10 dark:hover:bg-white/10"
           :title="t('settings')"
+          :aria-label="t('settings')"
           @click="settingsPanel?.show()"
         >
-          <Icon name="edit" />
+          <Icon name="settings" />
         </button>
       </div>
     </header>
 
-    <!-- 滚动内容区：时钟 + 书签玻璃卡 + 底部统计（整列居中，绝不让页面出现滚动条） -->
-    <div class="flex min-h-0 flex-1 flex-col items-center px-6 pt-6">
+    <!-- 书签区按内容收拢，超出可用高度后在内部滚动 -->
+    <main class="flex min-h-0 flex-1 flex-col items-center px-4 pt-[clamp(1.25rem,5vh,3rem)] sm:px-6">
       <!-- 时钟 + 问候（常驻，不参与滚动） -->
-      <div class="flex shrink-0 flex-col items-center">
-        <Clock />
-        <p class="mt-4 text-base text-slate-600 dark:text-slate-300">{{ greeting }}</p>
+      <div class="mb-6 flex shrink-0 flex-col items-center sm:mb-8">
+        <Clock :now="now" />
+        <p class="mt-2 text-xs tracking-wide text-slate-500 dark:text-slate-400">{{ greeting }}</p>
       </div>
 
-      <!-- 书签玻璃卡：占据剩余空间，仅书签超量时内部滚动 -->
+      <!-- 玻璃卡不再强制填满剩余空间；保留布局宽度设置 -->
       <div
-        class="glass mt-6 mb-3 flex min-h-0 w-full flex-1 flex-col rounded-3xl px-6 py-5"
-        style="width: min(900px, calc(100vw - 3rem))"
+        class="glass bookmark-island flex min-h-0 w-full min-w-[min(100%,20rem)] flex-col rounded-2xl p-4 sm:p-5"
+        :style="{ width: `${settings.layout.containerWidth}%`, maxWidth: '100%' }"
       >
         <div class="bookmark-scroll min-h-0 flex-1 overflow-y-auto">
           <div
@@ -126,11 +129,14 @@ const greeting = computed(() => t(greetingKey()))
         </div>
       </div>
 
-      <!-- 底部统计（淡色，无网络依赖） -->
-      <footer class="mb-3 shrink-0 text-xs text-slate-400 dark:text-slate-500">
+      <p class="mt-3 shrink-0 text-center text-xs text-slate-500 dark:text-slate-400">
         {{ t('bookmarksCount', { n: stats.total }) }} · {{ t('openAllHint') }}
-      </footer>
-    </div>
+      </p>
+    </main>
+
+    <footer class="flex shrink-0 justify-center px-6 pt-6 pb-5">
+      <YearProgress :now="now" />
+    </footer>
 
     <!-- 全局对话框 / 轻提示 / 引导 / 设置面板 -->
     <ConfirmDialog />
@@ -157,25 +163,25 @@ const greeting = computed(() => t(greetingKey()))
 .lm-bg[data-bg='gradient-emerald'] {
   background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 50%, #ecfeff 100%);
 }
-.dark .lm-bg[data-bg='gradient-emerald'] {
+html[data-theme='dark'] .lm-bg[data-bg='gradient-emerald'] {
   background: linear-gradient(135deg, #064e3b 0%, #022c22 50%, #0f172a 100%);
 }
 .lm-bg[data-bg='gradient-sky'] {
   background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 50%, #f0f9ff 100%);
 }
-.dark .lm-bg[data-bg='gradient-sky'] {
+html[data-theme='dark'] .lm-bg[data-bg='gradient-sky'] {
   background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0f172a 100%);
 }
 .lm-bg[data-bg='gradient-sunset'] {
   background: linear-gradient(135deg, #fed7aa 0%, #fecaca 50%, #fbcfe8 100%);
 }
-.dark .lm-bg[data-bg='gradient-sunset'] {
+html[data-theme='dark'] .lm-bg[data-bg='gradient-sunset'] {
   background: linear-gradient(135deg, #7c2d12 0%, #9d174d 50%, #1e1b4b 100%);
 }
 .lm-bg[data-bg='gradient-slate'] {
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%);
 }
-.dark .lm-bg[data-bg='gradient-slate'] {
+html[data-theme='dark'] .lm-bg[data-bg='gradient-slate'] {
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%);
 }
 </style>

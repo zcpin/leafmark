@@ -10,11 +10,39 @@ import {
   validateImageFile,
 } from '@/lib/wallpaper'
 import { t } from '@/lib/i18n'
+import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
 const settings = useSettingsStore()
+const bookmarks = useBookmarksStore()
 const ui = useUiStore()
+
+const homeFolderName = computed(() => {
+  if (bookmarks.homeFolder) return bookmarks.homeFolder.title
+  if (bookmarks.error) return t('loadError')
+  if (bookmarks.tree.length === 0) return t('loading')
+  return t('homeFolderUnavailable')
+})
+const homeFolderHint = computed(() => {
+  if (settings.homeFolderId === null) return t('defaultHomeHint')
+  if (bookmarks.tree.length > 0 && !bookmarks.homeFolder) return t('homeFolderUnavailableHint')
+  return t('customHomeHint')
+})
+const resettingHome = ref(false)
+
+async function resetHomeFolder() {
+  if (resettingHome.value) return
+  resettingHome.value = true
+  try {
+    await bookmarks.resetHomeFolder()
+    ui.toast(t('homeReset'))
+  } catch {
+    ui.toast(t('homeSaveFailed'))
+  } finally {
+    resettingHome.value = false
+  }
+}
 
 const open = ref(false)
 const tab = ref<'appearance' | 'layout' | 'general'>('appearance')
@@ -96,6 +124,16 @@ const reduceEffects = computed({
   set: (v: boolean) => void settings.setReduceEffects(v),
 })
 
+async function onTransparencyInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  try {
+    await settings.setGlassTransparency(Number(input.value))
+  } catch {
+    input.value = String(settings.glassTransparency)
+    ui.toast(t('appearanceSaveFailed'))
+  }
+}
+
 const themeLabel = computed(() =>
   settings.theme === 'dark' ? t('themeDark') : settings.theme === 'light' ? t('themeLight') : t('themeAuto'),
 )
@@ -156,6 +194,26 @@ const themeLabel = computed(() =>
                 <Icon :name="settings.theme === 'dark' ? 'moon' : settings.theme === 'light' ? 'sun' : 'monitor'" />
               </button>
             </section>
+
+            <label class="block">
+              <div class="mb-2 flex items-center justify-between gap-3 text-sm text-slate-700 dark:text-slate-200">
+                <span>{{ t('glassTransparency') }}</span>
+                <span class="text-xs tabular-nums">{{ settings.glassTransparency }}%</span>
+              </div>
+              <input
+                :value="settings.glassTransparency"
+                :aria-label="t('glassTransparency')"
+                type="range"
+                min="0"
+                max="60"
+                step="5"
+                class="w-full accent-emerald-500"
+                @input="onTransparencyInput"
+              />
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {{ t('glassTransparencyHint') }}
+              </p>
+            </label>
 
             <section>
               <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{{ t('background') }}</h3>
@@ -220,6 +278,24 @@ const themeLabel = computed(() =>
 
           <!-- 通用 -->
           <div v-show="tab === 'general'" class="space-y-4">
+            <section class="glass rounded-xl px-4 py-3">
+              <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ t('homeFolder') }}</h3>
+              <div class="mt-2 flex min-w-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                <Icon name="folder" class="shrink-0 text-amber-500 dark:text-amber-400" />
+                <span class="truncate" :title="homeFolderName">{{ homeFolderName }}</span>
+              </div>
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {{ homeFolderHint }}
+              </p>
+              <button
+                type="button"
+                class="mt-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/25 disabled:cursor-default disabled:opacity-40 dark:text-emerald-300"
+                :disabled="settings.homeFolderId === null || resettingHome"
+                @click="resetHomeFolder"
+              >
+                {{ resettingHome ? t('homeSaving') : t('resetHome') }}
+              </button>
+            </section>
             <label class="glass flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-3">
               <span class="text-sm text-slate-700 dark:text-slate-200">{{ t('settingsOpenInNewTab') }}</span>
               <input v-model="openInNewTab" type="checkbox" class="size-4 accent-emerald-500" />

@@ -19,7 +19,7 @@ export default tseslint.config(
   {
     files: ['**/*.{ts,vue}'],
     languageOptions: {
-      globals: { ...globals.browser },
+      globals: { ...globals.browser, chrome: 'readonly' },
     },
     rules: {
       // 组件名允许单词（App、入口组件等）

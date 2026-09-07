@@ -1,5 +1,5 @@
 // 书签数据层：树加载、事件自动刷新、主视图状态、写回操作
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 
 import {
@@ -9,7 +9,7 @@ import {
   removeBookmark as apiRemoveBookmark,
   updateBookmark as apiUpdateBookmark,
 } from '@/lib/chrome-bookmarks'
-import { findNode, getPath } from '@/lib/tree-utils'
+import { findNode, getPath, isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useSettingsStore } from './settings'
 
@@ -21,7 +21,8 @@ function collectUrls(node: BookmarkNode | undefined): string[] {
 }
 
 export const useBookmarksStore = defineStore('bookmarks', () => {
-  const tree = ref<BookmarkNode[]>([])
+  // Chrome 返回的是整棵不可变快照；只跟踪根数组替换，避免为大树建立深层代理。
+  const tree = shallowRef<BookmarkNode[]>([])
   const loading = ref(false)
   const error = ref<Error | null>(null)
 
@@ -30,23 +31,72 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
 
   const settings = useSettingsStore()
 
-  const currentId = computed(() => viewFolderId.value ?? settings.homeFolderId ?? '1')
-  const currentFolder = computed(() => findNode(tree.value, currentId.value))
+  /** 保存的主页目录；失效时保留选择，由视图回退到默认书签栏。 */
+  const homeFolder = computed(() => {
+    const node = findNode(tree.value, settings.homeFolderId ?? '1')
+    return node && isFolder(node) ? node : undefined
+  })
+  const currentFolder = computed(() => {
+    const viewed = viewFolderId.value ? findNode(tree.value, viewFolderId.value) : undefined
+    return viewed ?? homeFolder.value ?? findNode(tree.value, '1')
+  })
+  const currentId = computed(() => currentFolder.value?.id ?? '1')
   const currentChildren = computed(() => currentFolder.value?.children ?? [])
   /** A6 面包屑：从根到当前视图的路径 */
   const breadcrumb = computed(() => getPath(tree.value, currentId.value))
 
   let unsubEvents: (() => void) | null = null
+  let refreshPromise: Promise<void> | null = null
+  let resolveRefresh: (() => void) | null = null
+  let refreshRequested = false
+  let refreshScheduled = false
+  let refreshRunning = false
 
-  async function load() {
+  /**
+   * 请求一次最新快照：同一轮事件先合并，读取期间的新请求在当前读取结束后再补一次。
+   * 这样写回触发的事件与写回后的显式刷新共享同一个 Promise，不会重复读取。
+   */
+  function load(): Promise<void> {
+    refreshRequested = true
+    if (!refreshPromise) {
+      refreshPromise = new Promise<void>((resolve) => {
+        resolveRefresh = resolve
+      })
+    }
+
+    if (!refreshScheduled) {
+      refreshScheduled = true
+      setTimeout(() => {
+        refreshScheduled = false
+        void runRefresh()
+      }, 0)
+    }
+
+    return refreshPromise
+  }
+
+  async function runRefresh() {
+    if (refreshRunning) return
+    refreshRunning = true
     loading.value = true
-    error.value = null
     try {
-      tree.value = await apiGetTree()
-    } catch (e) {
-      error.value = e instanceof Error ? e : new Error(String(e))
+      while (refreshRequested) {
+        refreshRequested = false
+        error.value = null
+        try {
+          tree.value = await apiGetTree()
+        } catch (e) {
+          error.value = e instanceof Error ? e : new Error(String(e))
+        }
+      }
     } finally {
+      refreshRunning = false
       loading.value = false
+      const resolve = resolveRefresh
+      resolveRefresh = null
+      refreshPromise = null
+      resolve?.()
+      if (refreshRequested) void load()
     }
   }
 
@@ -60,6 +110,12 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
 
   function setViewFolder(id: string) {
     viewFolderId.value = id
+  }
+
+  /** 清除自定义主页和临时目录选择，回到默认书签栏。 */
+  async function resetHomeFolder() {
+    await settings.setHomeFolderId(null)
+    viewFolderId.value = null
   }
 
   async function updateBookmark(id: string, changes: { title?: string; url?: string }) {
@@ -93,12 +149,14 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     loading,
     error,
     viewFolderId,
+    homeFolder,
     currentFolder,
     currentChildren,
     breadcrumb,
     init,
     load,
     setViewFolder,
+    resetHomeFolder,
     updateBookmark,
     removeBookmark,
     moveBookmark,

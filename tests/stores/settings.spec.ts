@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useSettingsStore } from '@/stores/settings'
 import { chromeMock } from '../mocks/chrome'
@@ -8,6 +8,37 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     chromeMock.__reset()
+  })
+
+  it.each(['2', null])('主页保存失败时保留原设置（目标 %s）', async (target) => {
+    const store = useSettingsStore()
+    await store.init()
+    await store.setHomeFolderId('10')
+    chromeMock.storage.sync.set.mockImplementationOnce((_items, callback) => {
+      chromeMock.runtime.lastError = { message: 'storage unavailable' }
+      callback()
+      chromeMock.runtime.lastError = null
+    })
+
+    await expect(store.setHomeFolderId(target)).rejects.toThrow('storage unavailable')
+    expect(store.homeFolderId).toBe('10')
+    expect(chromeMock.__storage.sync.get('homeFolderId')).toBe('10')
+    store.dispose()
+  })
+
+  it('主页保存获得成功确认后才更新当前选择', async () => {
+    const store = useSettingsStore()
+    await store.setHomeFolderId('10')
+    let confirmSave: (() => void) | undefined
+    chromeMock.storage.sync.set.mockImplementationOnce((_items, callback) => {
+      confirmSave = callback
+    })
+
+    const pending = store.setHomeFolderId('2')
+    expect(store.homeFolderId).toBe('10')
+    confirmSave?.()
+    await pending
+    expect(store.homeFolderId).toBe('2')
   })
 
   it('setLayout 持久化布局并更新 CSS 变量', async () => {
@@ -22,6 +53,50 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     })
     expect(document.documentElement.style.getPropertyValue('--lm-card-width')).toBe('220px')
     expect(document.documentElement.style.getPropertyValue('--lm-card-height')).toBe('56px')
+  })
+
+  it('没有旧配置时使用更实的默认面板透明度', async () => {
+    const store = useSettingsStore()
+    await store.init()
+    expect(store.glassTransparency).toBe(15)
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('0.85')
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-strong-opacity')).toBe('0.95')
+    store.dispose()
+  })
+
+  it('透明度修改更新视觉并持久化，重新打开后恢复', async () => {
+    const store = useSettingsStore()
+    await store.init()
+    await store.setGlassTransparency(40)
+    expect(chromeMock.__storage.sync.get('glassTransparency')).toBe(40)
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('0.6')
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-strong-opacity')).toBe('0.7')
+    store.dispose()
+
+    setActivePinia(createPinia())
+    const reopened = useSettingsStore()
+    await reopened.init()
+    expect(reopened.glassTransparency).toBe(40)
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('0.6')
+    reopened.dispose()
+  })
+
+  it('同步其他页面的透明度变化，移除配置后恢复默认值', async () => {
+    const store = useSettingsStore()
+    await store.init()
+    chromeMock.storage.sync.set({ glassTransparency: 0 }, () => {})
+    await vi.waitFor(() => {
+      expect(store.glassTransparency).toBe(0)
+      expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('1')
+      expect(document.documentElement.style.getPropertyValue('--lm-glass-strong-opacity')).toBe('1')
+    })
+
+    chromeMock.storage.onChanged.__emit({ glassTransparency: { oldValue: 0 } }, 'sync')
+    await vi.waitFor(() => {
+      expect(store.glassTransparency).toBe(15)
+      expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('0.85')
+    })
+    store.dispose()
   })
 
   it('setSolidBg 切换为纯色模式，清空壁纸 id', async () => {
@@ -54,11 +129,56 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     expect(chromeMock.__storage.local.get('wallpaperDataUrl')).toBe('data:image/jpeg,zzz')
   })
 
+  it('切换纯色背景时清理旧壁纸数据', async () => {
+    const store = useSettingsStore()
+    await store.init()
+    await store.setUserWallpaper('data:image/jpeg,old-wallpaper')
+
+    await store.setSolidBg('gradient-sky')
+
+    expect(store.wallpaperDataUrl).toBeNull()
+    expect(chromeMock.__storage.local.get('wallpaperDataUrl')).toBeNull()
+  })
+
   it('init 读取持久化的布局', async () => {
     chromeMock.__storage.sync.set('layout', { cardWidth: 180, cardHeight: 50, containerWidth: 90 })
     const store = useSettingsStore()
     await store.init()
     expect(store.layout.cardWidth).toBe(180)
     expect(store.layout.containerWidth).toBe(90)
+  })
+
+  it('init 将已持久化的视觉降级设置应用到根节点', async () => {
+    chromeMock.__storage.sync.set('reduceEffects', true)
+    const store = useSettingsStore()
+
+    await store.init()
+
+    expect(document.documentElement.classList.contains('reduce-effects')).toBe(true)
+    store.dispose()
+    document.documentElement.classList.remove('reduce-effects')
+  })
+
+  it('并发/重复 init 只注册一组监听，dispose 可清理', async () => {
+    const media = {
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    const matchMedia = vi
+      .spyOn(window, 'matchMedia')
+      .mockReturnValue(media as unknown as MediaQueryList)
+    const store = useSettingsStore()
+
+    await Promise.all([store.init(), store.init(), store.init()])
+
+    expect(chromeMock.storage.onChanged.addListener).toHaveBeenCalledTimes(2)
+    expect(media.addEventListener).toHaveBeenCalledTimes(1)
+
+    store.dispose()
+
+    expect(chromeMock.storage.onChanged.removeListener).toHaveBeenCalledTimes(2)
+    expect(media.removeEventListener).toHaveBeenCalledTimes(1)
+    matchMedia.mockRestore()
   })
 })

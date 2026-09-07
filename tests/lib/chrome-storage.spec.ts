@@ -45,4 +45,14 @@ describe('chrome-storage', () => {
       globalThis.chrome = saved
     }
   })
+
+  it('扩展存储的 runtime.lastError 会拒绝 Promise', async () => {
+    chrome.runtime.lastError = { message: 'storage unavailable' }
+    try {
+      await expect(storageGet('broken', 'fallback')).rejects.toThrow('storage unavailable')
+      await expect(storageSet('broken', 'value')).rejects.toThrow('storage unavailable')
+    } finally {
+      chrome.runtime.lastError = null
+    }
+  })
 })

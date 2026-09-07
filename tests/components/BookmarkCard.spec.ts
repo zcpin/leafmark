@@ -26,6 +26,54 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
     vi.clearAllMocks()
   })
 
+  it('当前主页目录的右键菜单可恢复默认主页，并清除当前目录覆盖', async () => {
+    const bookmarks = useBookmarksStore()
+    const settings = useSettingsStore()
+    await bookmarks.init()
+    await settings.setHomeFolderId(devFolder.id)
+    bookmarks.setViewFolder(devFolder.id)
+    const wrapper = mount(BookmarkCard, { props: { node: devFolder }, attachTo: document.body })
+
+    await wrapper.trigger('contextmenu')
+    const menuButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'))
+    const reset = menuButtons.find((button) => button.textContent?.trim() === '恢复默认主页')
+    expect(reset).toBeDefined()
+    expect(menuButtons.some((button) => button.textContent?.trim() === '设为主页')).toBe(false)
+    reset!.click()
+
+    await vi.waitFor(() => {
+      expect(settings.homeFolderId).toBeNull()
+      expect(chromeMock.__storage.sync.get('homeFolderId')).toBeNull()
+      expect(bookmarks.viewFolderId).toBeNull()
+      expect(bookmarks.currentFolder?.id).toBe('1')
+    })
+    wrapper.unmount()
+    bookmarks.dispose()
+  })
+
+  it('其他目录仍可通过右键设为主页', async () => {
+    const bookmarks = useBookmarksStore()
+    const settings = useSettingsStore()
+    await bookmarks.init()
+    await settings.setHomeFolderId('2')
+    const wrapper = mount(BookmarkCard, { props: { node: devFolder }, attachTo: document.body })
+
+    await wrapper.trigger('contextmenu')
+    const menuButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'))
+    const setHome = menuButtons.find((button) => button.textContent?.trim() === '设为主页')
+    expect(setHome).toBeDefined()
+    expect(menuButtons.some((button) => button.textContent?.trim() === '恢复默认主页')).toBe(false)
+    setHome!.click()
+
+    await vi.waitFor(() => {
+      expect(settings.homeFolderId).toBe(devFolder.id)
+      expect(chromeMock.__storage.sync.get('homeFolderId')).toBe(devFolder.id)
+      expect(bookmarks.currentFolder?.id).toBe(devFolder.id)
+    })
+    wrapper.unmount()
+    bookmarks.dispose()
+  })
+
   it('B3 右键文件夹 → 全部打开：收集嵌套书签 URL 并批量打开+分组', async () => {
     const bookmarks = useBookmarksStore()
     await bookmarks.init()

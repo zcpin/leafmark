@@ -14,7 +14,11 @@ export async function generateQrDataUrl(text: string, size = 240): Promise<strin
 
 /** 触发下载（文件名取自书签标题，转 ASCII 安全字符） */
 export function downloadQr(dataUrl: string, title: string): void {
-  const safe = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'qrcode'
+  const safe =
+    title
+      .replace(/[^a-z0-9]/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase() || 'qrcode'
   const a = document.createElement('a')
   a.href = dataUrl
   a.download = `${safe}_qrcode.png`
