@@ -30,6 +30,11 @@ export function getChildren(folderId: string): Promise<BookmarkNode[]> {
   )
 }
 
+export function createBookmark(details: { parentId: string; index: number; title: string; url?: string }): Promise<BookmarkNode> {
+  if (!isExtensionEnv()) return Promise.reject(new Error('not in extension env'))
+  return callChrome<BookmarkNode>((callback) => chrome.bookmarks.create(details, callback))
+}
+
 export function updateBookmark(
   id: string,
   changes: { title?: string; url?: string },

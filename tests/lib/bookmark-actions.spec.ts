@@ -34,6 +34,7 @@ function makeContext(
     openUrl: vi.fn(),
     openAllInGroup: vi.fn().mockResolvedValue(undefined),
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    deleteBookmarks: vi.fn().mockResolvedValue({ deleted: [node.id], skipped: 0, failed: 0 }),
   }
 }
 
@@ -67,13 +68,13 @@ describe('bookmark-actions', () => {
     expect(context.ui.toast).toHaveBeenCalledWith('主页已更新')
   })
 
-  it('确认删除文件夹时使用递归删除', async () => {
+  it('确认删除后交给可撤销删除入口', async () => {
     const context = makeContext({ id: '10', title: 'Dev' }, true)
     context.ui.confirm.mockResolvedValueOnce(true)
 
     await executeBookmarkAction('delete', context)
 
-    expect(context.bookmarks.removeBookmark).toHaveBeenCalledWith('10', true)
+    expect(context.deleteBookmarks).toHaveBeenCalledWith([{ id: '10', url: undefined }])
   })
 
   it('恢复默认主页后显示完成提示', async () => {

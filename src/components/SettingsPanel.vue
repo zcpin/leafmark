@@ -11,12 +11,27 @@ import {
 } from '@/lib/wallpaper'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
-import { useSettingsStore } from '@/stores/settings'
+import { useLinkCheckerStore } from '@/stores/link-checker'
+import { useDuplicatesStore } from '@/stores/duplicates'
+import { useSettingsStore, type DisplaySettings } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
 const settings = useSettingsStore()
 const bookmarks = useBookmarksStore()
 const ui = useUiStore()
+const linkChecker = useLinkCheckerStore()
+const duplicates = useDuplicatesStore()
+const displayOptions = [
+  { key: 'clock', label: 'displayClock' },
+  { key: 'yearProgress', label: 'displayYearProgress' },
+  { key: 'stats', label: 'displayStats' },
+] as const
+
+async function onDisplayChange(key: keyof DisplaySettings, event: Event) {
+  const input = event.target as HTMLInputElement
+  try { await settings.setDisplay({ [key]: input.checked }) }
+  catch { input.checked = settings.display[key]; ui.toast(t('appearanceSaveFailed')) }
+}
 
 const homeFolderName = computed(() => {
   if (bookmarks.homeFolder) return bookmarks.homeFolder.title
@@ -52,6 +67,16 @@ function show() {
 }
 function hide() {
   open.value = false
+}
+
+function showLinkChecker() {
+  hide()
+  linkChecker.show()
+}
+
+function showDuplicates() {
+  hide()
+  duplicates.show()
 }
 
 defineExpose({ show, hide })
@@ -252,6 +277,13 @@ const themeLabel = computed(() =>
                 />
               </div>
             </section>
+            <section class="space-y-2">
+              <h3 class="text-xs font-semibold text-slate-400">{{ t('displaySettings') }}</h3>
+              <label v-for="item in displayOptions" :key="item.key" class="glass flex items-center justify-between gap-3 rounded-xl px-4 py-3">
+                <span class="text-sm text-slate-700 dark:text-slate-200">{{ t(item.label) }}</span>
+                <input type="checkbox" :checked="settings.display[item.key]" class="size-4 shrink-0 accent-emerald-500" @change="onDisplayChange(item.key, $event)" />
+              </label>
+            </section>
           </div>
 
           <!-- 布局 -->
@@ -278,6 +310,18 @@ const themeLabel = computed(() =>
 
           <!-- 通用 -->
           <div v-show="tab === 'general'" class="space-y-4">
+            <section class="glass rounded-xl px-4 py-3">
+              <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ t('duplicateTitle') }}</h3>
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{{ t('duplicateHint') }}</p>
+              <button type="button" class="mt-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300" @click="showDuplicates">{{ t('duplicateOpen') }}</button>
+            </section>
+            <section class="glass rounded-xl px-4 py-3">
+              <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ t('linkCheckTitle') }}</h3>
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{{ t('linkCheckEntryHint') }}</p>
+              <button type="button" class="mt-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300" @click="showLinkChecker">
+                {{ t('linkCheckOpenTool') }}
+              </button>
+            </section>
             <section class="glass rounded-xl px-4 py-3">
               <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">{{ t('homeFolder') }}</h3>
               <div class="mt-2 flex min-w-0 items-center gap-2 text-sm text-slate-700 dark:text-slate-200">

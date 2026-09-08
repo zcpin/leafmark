@@ -31,6 +31,7 @@ function cloneNode(node: BookmarkNode): BookmarkNode {
 function makeChrome() {
   // —— 书签 ——
   const bookmarkState = { tree: cloneTree(SAMPLE_TREE) }
+  let bookmarkSequence = 10000
   const bookmarkEvents = {
     onCreated: createEvent(),
     onRemoved: createEvent(),
@@ -63,6 +64,15 @@ function makeChrome() {
     getChildren: vi.fn((id: string, cb: (children: BookmarkNode[]) => void) => {
       cb(cloneTree(findNode(bookmarkState.tree, id)?.children ?? []))
     }),
+    create: vi.fn((details: { parentId?: string; index?: number; title?: string; url?: string }, cb: (node: BookmarkNode) => void): void => {
+      const parentId = details.parentId ?? '1'
+      const parent = findNode(bookmarkState.tree, parentId)!
+      const node: BookmarkNode = { id: String(++bookmarkSequence), parentId, title: details.title ?? '', ...(details.url !== undefined ? { url: details.url } : { children: [] }) }
+      parent.children ??= []
+      parent.children.splice(details.index ?? parent.children.length, 0, node)
+      cb(cloneNode(node))
+      bookmarkEvents.onCreated.__emit(node.id, cloneNode(node))
+    }),
     update: vi.fn((id: string, changes: { title?: string; url?: string }, cb: (node: BookmarkNode) => void) => {
       const node = findNode(bookmarkState.tree, id)
       if (node) Object.assign(node, changes)
@@ -84,14 +94,19 @@ function makeChrome() {
     move: vi.fn(
       (id: string, dest: { parentId: string; index?: number }, cb: (node: BookmarkNode) => void) => {
         const oldParentId = findNode(bookmarkState.tree, id)?.parentId
+        const oldSiblings = oldParentId ? findNode(bookmarkState.tree, oldParentId)?.children ?? [] : []
+        const oldIndex = oldSiblings.findIndex((node) => node.id === id)
+        const destination = findNode(bookmarkState.tree, dest.parentId)
+        let index = dest.index ?? destination?.children?.length ?? 0
+        if (oldParentId === dest.parentId && index > oldIndex) index--
         const node = removeFromParent(bookmarkState.tree, id)
         const parent = findNode(bookmarkState.tree, dest.parentId)
         if (node && parent?.children) {
-          parent.children.splice(dest.index ?? parent.children.length, 0, node)
+          parent.children.splice(index, 0, node)
           node.parentId = dest.parentId
         }
         cb(node ? cloneNode(node) : (undefined as unknown as BookmarkNode))
-        bookmarkEvents.onMoved.__emit(id, { ...dest, oldParentId, oldIndex: 0 })
+        bookmarkEvents.onMoved.__emit(id, { ...dest, index, oldParentId, oldIndex })
       },
     ),
     __find: (id: string) => findNode(bookmarkState.tree, id),
@@ -205,6 +220,7 @@ function makeChrome() {
       storageState.local.clear()
       chromeMock.runtime.lastError = null
       tabSeq = 0
+      bookmarkSequence = 10000
       tabGroupStore.clear()
       Object.values(bookmarkEvents).forEach((e) => e.__clear())
       storageChanged.__clear()

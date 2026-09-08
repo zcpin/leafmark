@@ -9,11 +9,15 @@ import Breadcrumb from '@/components/Breadcrumb.vue'
 import Clock from '@/components/Clock.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EditBookmarkDialog from '@/components/EditBookmarkDialog.vue'
+import DuplicateDialog from '@/components/DuplicateDialog.vue'
 import Icon, { type IconName } from '@/components/Icon.vue'
+import LinkCheckDialog from '@/components/LinkCheckDialog.vue'
 import OnboardingOverlay from '@/components/OnboardingOverlay.vue'
 import QrCodeDialog from '@/components/QrCodeDialog.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ToastStack from '@/components/ToastStack.vue'
+import UndoDeleteButton from '@/components/UndoDeleteButton.vue'
+import { useDeletionsStore } from '@/stores/deletions'
 import YearProgress from '@/components/YearProgress.vue'
 import { useNow } from '@/composables/useNow'
 import { greetingKey } from '@/lib/greeting'
@@ -26,6 +30,7 @@ const settings = useSettingsStore()
 const bookmarks = useBookmarksStore()
 const stats = useStatsStore()
 const now = useNow()
+const deletions = useDeletionsStore()
 
 const settingsPanel = ref<{ show: () => void } | null>(null)
 
@@ -37,6 +42,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   settings.dispose()
   bookmarks.dispose()
+  deletions.dispose()
 })
 
 const themeIcon = computed<IconName>(() =>
@@ -72,6 +78,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
       <div class="mx-2 h-4 w-px bg-slate-400/30" />
       <Breadcrumb class="min-w-0 flex-1" />
       <div class="flex items-center gap-1">
+        <UndoDeleteButton />
         <button
           type="button"
           class="rounded-lg p-2 transition-colors hover:bg-slate-500/10 dark:hover:bg-white/10"
@@ -95,7 +102,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
     <!-- 书签区按内容收拢，超出可用高度后在内部滚动 -->
     <main class="flex min-h-0 flex-1 flex-col items-center px-4 pt-[clamp(1.25rem,5vh,3rem)] sm:px-6">
       <!-- 时钟 + 问候（常驻，不参与滚动） -->
-      <div class="mb-6 flex shrink-0 flex-col items-center sm:mb-8">
+      <div v-if="settings.display.clock" class="mb-6 flex shrink-0 flex-col items-center sm:mb-8">
         <Clock :now="now" />
         <p class="mt-2 text-xs tracking-wide text-slate-500 dark:text-slate-400">{{ greeting }}</p>
       </div>
@@ -129,12 +136,12 @@ const greeting = computed(() => t(greetingKey(now.value)))
         </div>
       </div>
 
-      <p class="mt-3 shrink-0 text-center text-xs text-slate-500 dark:text-slate-400">
+      <p v-if="settings.display.stats" class="mt-3 shrink-0 text-center text-xs text-slate-500 dark:text-slate-400">
         {{ t('bookmarksCount', { n: stats.total }) }} · {{ t('openAllHint') }}
       </p>
     </main>
 
-    <footer class="flex shrink-0 justify-center px-6 pt-6 pb-5">
+    <footer v-if="settings.display.yearProgress" class="flex shrink-0 justify-center px-6 pt-6 pb-5">
       <YearProgress :now="now" />
     </footer>
 
@@ -144,6 +151,8 @@ const greeting = computed(() => t(greetingKey(now.value)))
     <QrCodeDialog />
     <OnboardingOverlay />
     <SettingsPanel ref="settingsPanel" />
+    <LinkCheckDialog />
+    <DuplicateDialog />
     <ToastStack />
   </div>
 </template>

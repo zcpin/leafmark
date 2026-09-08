@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import BookmarkCard from '@/components/BookmarkCard.vue'
+import BookmarkGrid from '@/components/BookmarkGrid.vue'
 import QrCodeDialog from '@/components/QrCodeDialog.vue'
-import { openAllInGroup } from '@/lib/tabs'
+import { openAllInGroup, openUrl } from '@/lib/tabs'
 import { findNode } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -24,6 +25,46 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+  })
+
+  it.each([{ ctrlKey: true }, { metaKey: true }])('Ctrl/⌘ 点击后台打开，不受当前页设置影响：%o', async (modifiers) => {
+    useSettingsStore().openInNewTab = false
+    const wrapper = mount(BookmarkCard, { props: { node: github } })
+    await wrapper.trigger('click', { button: 0, ...modifiers })
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith('https://github.com', true, false)
+    wrapper.unmount()
+  })
+
+  it('中键仅打开一次后台标签，Ctrl+Shift 则前台打开', async () => {
+    const wrapper = mount(BookmarkCard, { props: { node: github } })
+    await wrapper.trigger('click', { button: 1 })
+    await wrapper.trigger('auxclick', { button: 1 })
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith('https://github.com', true, false)
+    vi.mocked(openUrl).mockClear()
+    await wrapper.trigger('click', { button: 0, ctrlKey: true, shiftKey: true })
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith('https://github.com', true, true)
+    wrapper.unmount()
+  })
+
+  it('拖到卡片后方显示插入线，且不会冒泡为第二次网格移动', async () => {
+    const bookmarks = useBookmarksStore()
+    await bookmarks.init()
+    bookmarks.setViewFolder('10')
+    const wrapper = mount(BookmarkGrid, { attachTo: document.body })
+    const target = wrapper.findAllComponents(BookmarkCard).find((card) => card.props('node').id === '101')!
+    const geometry = vi.spyOn(target.element, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 100, top: 0, bottom: 48, width: 100, height: 48, x: 0, y: 0, toJSON: () => ({}) })
+    const dataTransfer = new DataTransfer()
+    dataTransfer.setData('text/plain', '100')
+    bookmarks.draggingId = '100'
+    await target.trigger('dragover', { clientX: 90, dataTransfer })
+    expect(target.attributes('data-drop-zone')).toBe('after')
+    await target.trigger('drop', { clientX: 90, dataTransfer })
+    await vi.waitFor(() => expect(bookmarks.currentChildren.map((node) => node.id)).toEqual(['101', '100', '102']))
+    expect(chromeMock.bookmarks.move).toHaveBeenCalledTimes(1)
+    expect(chromeMock.bookmarks.move).toHaveBeenCalledWith('100', { parentId: '10', index: 2 }, expect.any(Function))
+    geometry.mockRestore()
+    wrapper.unmount()
+    bookmarks.dispose()
   })
 
   it('当前主页目录的右键菜单可恢复默认主页，并清除当前目录覆盖', async () => {

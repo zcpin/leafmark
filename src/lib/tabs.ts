@@ -4,11 +4,11 @@ import { callChrome } from './chrome-bridge'
 import { isExtensionEnv } from './env'
 
 /** 在新标签页打开单个 URL */
-export function openUrl(url: string, inNewTab: boolean): void {
+export function openUrl(url: string, inNewTab: boolean, active = true): void {
   if (isExtensionEnv()) {
     if (inNewTab) {
       // 单个打开保持原有 void 语义；桥接负责读取 lastError，失败不产生未处理 rejection。
-      void callChrome<chrome.tabs.Tab>((cb) => chrome.tabs.create({ url, active: true }, cb)).catch(
+      void callChrome<chrome.tabs.Tab>((cb) => chrome.tabs.create({ url, active }, cb)).catch(
         () => {},
       )
     } else {

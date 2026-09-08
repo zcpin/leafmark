@@ -28,6 +28,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
 
   /** 侧栏树点击/面包屑跳转的当前视图（不持久化；null = 回退到主页文件夹） */
   const viewFolderId = ref<string | null>(null)
+  const draggingId = ref<string | null>(null)
 
   const settings = useSettingsStore()
 
@@ -142,6 +143,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   function dispose() {
     unsubEvents?.()
     unsubEvents = null
+    draggingId.value = null
   }
 
   return {
@@ -149,6 +151,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     loading,
     error,
     viewFolderId,
+    draggingId,
     homeFolder,
     currentFolder,
     currentChildren,

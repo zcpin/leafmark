@@ -6,6 +6,7 @@ import { nextTick } from 'vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import { useBookmarksStore } from '@/stores/bookmarks'
+import { useLinkCheckerStore } from '@/stores/link-checker'
 import { useSettingsStore } from '@/stores/settings'
 import { chromeMock } from '../mocks/chrome'
 
@@ -33,6 +34,19 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
     expect(text).toContain('布局')
     expect(text).toContain('通用')
     wrapper.unmount()
+  })
+
+  it('通用设置的检测入口打开工具并收起设置面板', async () => {
+    const { wrapper, settings } = await openPanel()
+    const buttons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
+    buttons.find((button) => button.textContent?.trim() === '通用')!.click()
+    await nextTick()
+    buttons.find((button) => button.textContent?.trim() === '检测收藏链接')!.click()
+    await nextTick()
+    expect(useLinkCheckerStore().open).toBe(true)
+    expect(document.body.querySelector('aside')).toBeNull()
+    wrapper.unmount()
+    settings.dispose()
   })
 
   it('显示当前主页目录名称，并在改名或删除后更新状态', async () => {

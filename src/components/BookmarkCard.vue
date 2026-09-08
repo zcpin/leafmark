@@ -16,6 +16,7 @@ import {
 
 import { useHoverIntent } from '@/composables/useHoverIntent'
 import { executeBookmarkAction } from '@/lib/bookmark-actions'
+import { cardDropZone, resolveCardDrop, type CardDropZone } from '@/lib/drag-utils'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
 import { openAllInGroup, openUrl } from '@/lib/tabs'
@@ -25,6 +26,7 @@ import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
+import { useDeletionsStore } from '@/stores/deletions'
 
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
 import Icon from './Icon.vue'
@@ -39,6 +41,7 @@ const props = defineProps<{ node: BookmarkNode }>()
 const bookmarks = useBookmarksStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
+const deletions = useDeletionsStore()
 
 const isDir = computed(() => isFolder(props.node))
 const children = computed(() => props.node.children ?? [])
@@ -69,10 +72,37 @@ const favSrc = computed(() =>
 )
 const initial = computed(() => (props.node.title.trim().charAt(0) || '?').toUpperCase())
 
-function onOpenBookmark() {
+function onOpenBookmark(event?: MouseEvent | KeyboardEvent) {
   if (!props.node.url) return
-  openUrl(props.node.url, settings.openInNewTab)
-  closeChain?.()
+  const shortcut = event && (event.ctrlKey || event.metaKey || ('button' in event && event.button === 1))
+  if (shortcut) openUrl(props.node.url, true, !!event.shiftKey)
+  else {
+    openUrl(props.node.url, settings.openInNewTab)
+    closeChain?.()
+  }
+}
+
+function onCardClick(event: MouseEvent) {
+  if (event.button !== 0) return
+  if (isDir.value) onFolderClick()
+  else { event.preventDefault(); onOpenBookmark(event) }
+}
+
+function onAuxClick(event: MouseEvent) {
+  if (event.button !== 1 || isDir.value) return
+  event.preventDefault()
+  onOpenBookmark(event)
+}
+
+function onCardKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || (event.key === ' ' && isDir.value)) {
+    event.preventDefault()
+    if (isDir.value) onFolderClick()
+    else onOpenBookmark(event)
+  } else if (event.key === 'Escape') {
+    intent.closeNow()
+    closeChain?.()
+  }
 }
 
 /** 触屏兜底（A9 规格）：无 hover 场景下单击文件夹立即弹出 */
@@ -83,10 +113,17 @@ function onFolderClick() {
 // —— A4 拖拽排序（HTML5 DnD，原生）——
 // 拖拽进行中抑制悬停弹窗触发（A4 × A9 互斥）
 const dragging = ref(false)
-const dropOver = ref(false)
+const dropZone = ref<CardDropZone | null>(null)
+
+if (isDir.value) {
+  watch(() => bookmarks.draggingId, (id, previous) => {
+    if (previous && !id) intent.closeNow()
+  })
+}
 
 function onDragStart(e: DragEvent) {
   dragging.value = true
+  bookmarks.draggingId = props.node.id
   intent.closeNow()
   if (e.dataTransfer) {
     e.dataTransfer.setData('text/plain', props.node.id)
@@ -96,40 +133,46 @@ function onDragStart(e: DragEvent) {
 
 function onDragEnd() {
   dragging.value = false
-  dropOver.value = false
+  dropZone.value = null
+  if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
 }
 
 function onDragOver(e: DragEvent) {
-  // 允许 drop
+  const rect = cardEl.value?.getBoundingClientRect()
+  if (!rect) return
+  const zone = cardDropZone(e.clientX, rect.left, rect.width, isDir.value)
+  const sourceId = bookmarks.draggingId || e.dataTransfer?.getData('text/plain')
+  if (!sourceId || !resolveCardDrop(bookmarks.tree, sourceId, props.node.id, zone)) {
+    dropZone.value = null
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
+    return
+  }
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dropOver.value = true
+  dropZone.value = zone
 }
 
-function onDragLeave() {
-  dropOver.value = false
+function onDragLeave(e: DragEvent) {
+  if (e.relatedTarget instanceof Node && cardEl.value?.contains(e.relatedTarget)) return
+  dropZone.value = null
 }
 
-/** 落在卡片上：
- *  - 落在文件夹卡片 → 移入该文件夹（index 0）
- *  - 落在书签卡片 → 移到目标之后（目标父级的 index+1）
- *  落点与源位置相同则跳过写回（isSamePosition 由 store 层的 load 兜底，这里简化判断）
- */
+/** 落点与视觉提示使用同一规则，目标位置来自实际父目录（包含级联面板）。 */
 async function onDrop(e: DragEvent) {
   e.preventDefault()
-  dropOver.value = false
   const sourceId = e.dataTransfer?.getData('text/plain')
-  if (!sourceId || sourceId === props.node.id) return
-
-  if (isDir.value) {
-    // 进入文件夹
-    await bookmarks.moveBookmark(sourceId, props.node.id, 0)
-  } else {
-    // 同级重排：移到目标在父级中的位置之后
-    const parent = props.node.parentId ?? '1'
-    const siblings = bookmarks.currentChildren
-    const targetIndex = siblings.findIndex((n) => n.id === props.node.id)
-    await bookmarks.moveBookmark(sourceId, parent, targetIndex + 1)
+  const rect = cardEl.value?.getBoundingClientRect()
+  const zone = rect ? cardDropZone(e.clientX, rect.left, rect.width, isDir.value) : isDir.value ? 'inside' : 'after'
+  dropZone.value = null
+  try {
+    if (!sourceId) return
+    const destination = resolveCardDrop(bookmarks.tree, sourceId, props.node.id, zone)
+    if (destination) await bookmarks.moveBookmark(sourceId, destination.parentId, destination.index)
+  } catch {
+    ui.toast(t('bookmarkMoveFailed'))
+    await bookmarks.load()
+  } finally {
+    bookmarks.draggingId = null
   }
 }
 
@@ -160,6 +203,7 @@ function onPanelKeydown(e: KeyboardEvent) {
 }
 
 function onPanelScroll() {
+  if (bookmarks.draggingId) return
   closeChain?.()
 }
 
@@ -179,6 +223,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
   window.removeEventListener('keydown', onPanelKeydown)
   window.removeEventListener('scroll', onPanelScroll, true)
 })
@@ -224,6 +269,7 @@ async function onMenuSelect(key: string) {
     openUrl,
     openAllInGroup,
     clipboard: navigator.clipboard,
+    deleteBookmarks: deletions.remove,
   })
 }
 </script>
@@ -231,22 +277,29 @@ async function onMenuSelect(key: string) {
 <template>
   <div
     ref="cardEl"
-    class="glass bookmark-card group flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:ring-2 hover:ring-emerald-400/40"
+    class="glass bookmark-card group relative flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:ring-2 hover:ring-emerald-400/40 focus-visible:outline-2 focus-visible:outline-emerald-500"
     :class="{
       'ring-2 ring-emerald-500/60 opacity-50': dragging,
-      'ring-2 ring-emerald-400': dropOver,
     }"
+    :data-drop-zone="dropZone"
+    :role="isDir ? 'button' : 'link'"
+    :aria-label="props.node.title"
+    :aria-expanded="isDir ? intent.isOpen.value : undefined"
+    tabindex="0"
     style="height: var(--lm-card-height, 48px)"
     draggable="true"
     @contextmenu="onContextMenu"
-    @mouseenter="isDir && !dragging && intent.enter()"
-    @mouseleave="isDir && intent.leave()"
-    @click="isDir ? onFolderClick() : onOpenBookmark()"
+    @mouseenter="isDir && !bookmarks.draggingId && intent.enter()"
+    @mouseleave="isDir && !bookmarks.draggingId && intent.leave()"
+    @click="onCardClick"
+    @auxclick="onAuxClick"
+    @mousedown.middle.prevent
+    @keydown="onCardKeydown"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
-    @dragover="onDragOver"
-    @dragleave="onDragLeave"
-    @drop="onDrop"
+    @dragover.stop="onDragOver"
+    @dragleave.stop="onDragLeave"
+    @drop.stop="onDrop"
   >
     <!-- 文件夹 -->
     <template v-if="isDir">
@@ -293,7 +346,7 @@ async function onMenuSelect(key: string) {
         class="glass-strong fixed z-40 rounded-2xl p-3"
         :style="panelPos"
         @mouseenter="intent.enter"
-        @mouseleave="intent.leave"
+        @mouseleave="!bookmarks.draggingId && intent.leave()"
         @contextmenu.prevent
       >
         <div

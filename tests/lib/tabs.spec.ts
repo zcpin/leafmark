@@ -61,6 +61,11 @@ describe('tabs（B3 批量打开 + 分组）', () => {
     spy.mockRestore()
   })
 
+  it('快捷打开可以创建不抢焦点的后台标签页', () => {
+    openUrl('https://a.com', true, false)
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: 'https://a.com', active: false }, expect.any(Function))
+  })
+
   it('批量创建标签页遇到 runtime.lastError 时跳过失败项，不进入空分组', async () => {
     chromeMock.runtime.lastError = { message: 'tabs unavailable' }
     try {

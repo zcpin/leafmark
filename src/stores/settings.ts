@@ -4,6 +4,8 @@ import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { onStorageChanged, storageGet, storageSet } from '@/lib/chrome-storage'
+import { DEFAULT_LINK_TIMEOUT, normalizeLinkTimeout } from '@/lib/link-checker'
+import { normalizeIgnoredDomain, normalizeLinkCheckOptions, type LinkCheckOptions } from '@/lib/link-check-options'
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
 type ResolvedTheme = Exclude<ThemeMode, 'auto'>
@@ -26,6 +28,17 @@ export interface LayoutPreset {
   containerWidth: number
 }
 
+export interface DisplaySettings { clock: boolean; yearProgress: boolean; stats: boolean }
+
+function normalizeDisplay(value: unknown): DisplaySettings {
+  const source = value && typeof value === 'object' ? value as Partial<DisplaySettings> : {}
+  return {
+    clock: typeof source.clock === 'boolean' ? source.clock : true,
+    yearProgress: typeof source.yearProgress === 'boolean' ? source.yearProgress : true,
+    stats: typeof source.stats === 'boolean' ? source.stats : true,
+  }
+}
+
 const DEFAULT_LAYOUT: LayoutSettings = {
   cardWidth: 200,
   cardHeight: 48,
@@ -46,6 +59,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const homeFolderId = ref<string | null>(null)
   const openInNewTab = ref(true)
   const systemDark = ref(false)
+  const ready = ref(false)
+  const display = ref<DisplaySettings>(normalizeDisplay(null))
 
   // —— 布局 F6 ——
   const layout = ref<LayoutSettings>({ ...DEFAULT_LAYOUT })
@@ -54,6 +69,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const reduceEffects = ref(false)
   /** 面板透明度（0~60%）；0 表示完全不透明。 */
   const glassTransparency = ref(DEFAULT_GLASS_TRANSPARENCY)
+  const linkCheckTimeout = ref(DEFAULT_LINK_TIMEOUT)
+  const linkCheckOptions = ref<LinkCheckOptions>({ folderId: null, ignoredDomains: [] })
 
   // —— 背景 F2/F3/F5 ——
   const bgKind = ref<BackgroundKind>('solid')
@@ -118,6 +135,8 @@ export const useSettingsStore = defineStore('settings', () => {
     else if (key === 'openInNewTab') openInNewTab.value = value === true
     else if (key === 'reduceEffects') reduceEffects.value = value === true
     else if (key === 'glassTransparency') glassTransparency.value = normalizeTransparency(value)
+    else if (key === 'linkCheckTimeout') linkCheckTimeout.value = normalizeLinkTimeout(value)
+    else if (key === 'display') display.value = normalizeDisplay(value)
     else if (key === 'layout')
       layout.value = { ...DEFAULT_LAYOUT, ...(value as Partial<LayoutSettings>) }
     else if (key === 'bgKind') bgKind.value = value as BackgroundKind
@@ -127,6 +146,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function onLocalStorageChange(key: string, value: unknown) {
     if (key === 'wallpaperDataUrl') wallpaperDataUrl.value = value as string | null
+    else if (key === 'linkCheckOptions') linkCheckOptions.value = normalizeLinkCheckOptions(value)
   }
 
   watch(resolvedTheme, applyTheme)
@@ -145,6 +165,9 @@ export const useSettingsStore = defineStore('settings', () => {
       openInNewTab.value = await storageGet('openInNewTab', true)
       reduceEffects.value = await storageGet('reduceEffects', false)
       glassTransparency.value = normalizeTransparency(await storageGet('glassTransparency', DEFAULT_GLASS_TRANSPARENCY))
+      linkCheckTimeout.value = normalizeLinkTimeout(await storageGet('linkCheckTimeout', DEFAULT_LINK_TIMEOUT))
+      display.value = normalizeDisplay(await storageGet('display', null))
+      linkCheckOptions.value = normalizeLinkCheckOptions(await storageGet('linkCheckOptions', null, 'local'))
       layout.value = {
         ...DEFAULT_LAYOUT,
         ...(await storageGet<Partial<LayoutSettings>>('layout', {})),
@@ -169,6 +192,7 @@ export const useSettingsStore = defineStore('settings', () => {
       applyReduceEffects()
       applyGlassTransparency()
       initialized = true
+      ready.value = true
     })()
 
     initPromise = pending
@@ -190,6 +214,7 @@ export const useSettingsStore = defineStore('settings', () => {
       mediaQuery = null
     }
     initialized = false
+    ready.value = false
     initPromise = null
   }
 
@@ -223,6 +248,25 @@ export const useSettingsStore = defineStore('settings', () => {
     const next = normalizeTransparency(value)
     await storageSet('glassTransparency', next)
     glassTransparency.value = next
+  }
+
+  async function setLinkCheckTimeout(value: number) {
+    const next = normalizeLinkTimeout(value)
+    await storageSet('linkCheckTimeout', next)
+    linkCheckTimeout.value = next
+  }
+
+  async function setDisplay(partial: Partial<DisplaySettings>) {
+    const next = normalizeDisplay({ ...display.value, ...partial })
+    await storageSet('display', next)
+    display.value = next
+  }
+
+  async function setLinkCheckOptions(partial: Partial<LinkCheckOptions>) {
+    if (partial.ignoredDomains?.some((domain) => !normalizeIgnoredDomain(domain))) throw new Error('Invalid domain')
+    const next = normalizeLinkCheckOptions({ ...linkCheckOptions.value, ...partial })
+    await storageSet('linkCheckOptions', next, 'local')
+    linkCheckOptions.value = next
   }
 
   async function setLayout(partial: Partial<LayoutSettings>) {
@@ -263,11 +307,15 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
+    ready,
+    display,
     theme,
     homeFolderId,
     openInNewTab,
     reduceEffects,
     glassTransparency,
+    linkCheckTimeout,
+    linkCheckOptions,
     layout,
     bgKind,
     solidBg,
@@ -282,6 +330,9 @@ export const useSettingsStore = defineStore('settings', () => {
     setOpenInNewTab,
     setReduceEffects,
     setGlassTransparency,
+    setLinkCheckTimeout,
+    setDisplay,
+    setLinkCheckOptions,
     setLayout,
     setSolidBg,
     setPresetWallpaper,
