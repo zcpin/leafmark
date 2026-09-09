@@ -4,11 +4,13 @@ import { onMounted, ref } from 'vue'
 
 import { t } from '@/lib/i18n'
 import { storageGet, storageSet } from '@/lib/chrome-storage'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 const COMPLETED_KEY = 'onboardingCompleted'
 
 const visible = ref(false)
 const step = ref(0)
+const { setPanel, titleId } = useDialogFocus(() => visible.value, () => { void finish().catch(() => {}) })
 
 const steps = [
   { title: t('onboardingStep1Title'), desc: t('onboardingStep1Desc') },
@@ -41,11 +43,11 @@ function next() {
       v-if="visible"
       class="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/50 p-4"
     >
-      <div class="glass-strong w-full max-w-sm rounded-2xl p-6 text-center">
+      <div :ref="setPanel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1" class="glass-strong w-full max-w-sm rounded-2xl p-6 text-center outline-none">
         <div class="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/15 text-3xl">
           🍃
         </div>
-        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">
+        <h2 :id="titleId" class="text-base font-semibold text-slate-800 dark:text-slate-100">
           {{ steps[step]?.title }}
         </h2>
         <p class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">

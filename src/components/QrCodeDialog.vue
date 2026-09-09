@@ -5,10 +5,12 @@ import { onMounted, ref, watch } from 'vue'
 import { downloadQr, generateQrDataUrl } from '@/lib/qrcode'
 import { t } from '@/lib/i18n'
 import { useUiStore } from '@/stores/ui'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 import Icon from './Icon.vue'
 
 const ui = useUiStore()
+const { setPanel, titleId } = useDialogFocus(() => ui.qrVisible, () => ui.resolveQr())
 
 const dataUrl = ref('')
 const loading = ref(false)
@@ -49,9 +51,12 @@ function download() {
       v-if="ui.qrVisible"
       class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4"
       @click.self="ui.resolveQr()"
-      @keydown.esc="ui.resolveQr()"
     >
-      <div class="glass-strong w-full max-w-xs rounded-2xl p-6 text-center">
+      <div :ref="setPanel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1" class="glass-strong w-full max-w-xs rounded-2xl p-6 text-center outline-none">
+        <header class="mb-4 flex items-center justify-between gap-3">
+          <h2 :id="titleId" class="text-sm font-semibold text-slate-700 dark:text-slate-200">{{ t('qrCode') }}</h2>
+          <button type="button" :aria-label="t('close')" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-500/10" @click="ui.resolveQr()"><Icon name="x" /></button>
+        </header>
         <div class="relative mx-auto flex size-60 items-center justify-center">
           <div
             v-if="loading"

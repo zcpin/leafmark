@@ -3,6 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.5.1",
+  "engines": { "node": ">=22.12.0" },
   "description": "Leafmark — Bookmark New Tab（叶签：把书签变成新标签页）",
   "scripts": {
     "dev": "vite",

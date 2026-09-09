@@ -16,6 +16,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: ['chrome111', 'edge111'],
     rollupOptions: {
       input: {
         newtab: fileURLToPath(new URL('./src/newtab/index.html', import.meta.url)),
@@ -27,7 +28,13 @@ export default defineConfig({
     setupFiles: ['tests/setup.ts'],
     include: ['tests/**/*.spec.ts'],
     coverage: {
-      include: ['src/lib/**', 'src/stores/**', 'src/composables/**'],
+      include: ['src/lib/**', 'src/stores/**', 'src/composables/**', 'src/components/**/*.vue', 'src/newtab/App.vue'],
+      reportsDirectory: 'artifacts/coverage',
+      reporter: ['text-summary', 'html', 'json-summary'],
+      thresholds: {
+        statements: 80, lines: 80, functions: 80, branches: 70,
+        'src/{lib,stores,composables}/**': { statements: 85, lines: 90, functions: 85, branches: 75 },
+      },
     },
   },
 })

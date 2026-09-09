@@ -4,8 +4,10 @@ import { computed, ref, watch } from 'vue'
 
 import { t } from '@/lib/i18n'
 import { useUiStore } from '@/stores/ui'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 const ui = useUiStore()
+const { setPanel, titleId } = useDialogFocus(() => ui.editVisible, () => ui.resolveEdit(null))
 
 const title = ref('')
 const url = ref('')
@@ -44,10 +46,9 @@ function submit() {
       v-if="ui.editVisible"
       class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4"
       @click.self="ui.resolveEdit(null)"
-      @keydown.esc="ui.resolveEdit(null)"
     >
-      <div class="glass-strong w-full max-w-sm rounded-2xl p-6">
-        <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100">
+      <div :ref="setPanel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1" class="glass-strong w-full max-w-sm rounded-2xl p-6 outline-none">
+        <h2 :id="titleId" class="text-base font-semibold text-slate-800 dark:text-slate-100">
           {{ isFolder ? t('editFolderTitle') : t('editBookmarkTitle') }}
         </h2>
 

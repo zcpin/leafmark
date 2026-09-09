@@ -1,0 +1,223 @@
+{
+  "extensionVersion": "1.0.0",
+  "preparedOn": "2026-09-09",
+  "minimumChromeVersion": "111",
+  "requiredPermissions": [
+    "bookmarks",
+    "favicon",
+    "storage",
+    "tabGroups"
+  ],
+  "optionalHostPermissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "submissionStatus": "candidate-requires-public-privacy-url-and-publisher-dashboard",
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 4610,
+      "sha256": "9495188201c8cce932d08d974c0b574cf1071b39e4a8d9d00f7244036e370584"
+    },
+    {
+      "file": "icons/brand-512.png",
+      "bytes": 10485,
+      "sha256": "a86da2e853dd64a8110f5eaf35fbf48268626e36d008cbce9960f807a7b68b96",
+      "width": 512,
+      "height": 512,
+      "bitDepth": 8,
+      "colorType": 6
+    },
+    {
+      "file": "icons/chrome-128.png",
+      "bytes": 1573,
+      "sha256": "419f04494ed7f9f314abea8252b53cd6ea7c68ff8fbc81cda6994d98933b8190",
+      "width": 128,
+      "height": 128,
+      "bitDepth": 8,
+      "colorType": 6
+    },
+    {
+      "file": "icons/edge-300.png",
+      "bytes": 5170,
+      "sha256": "2f8ac8a5fad46e681dcda33ea6d3cfb93eab3e85a29ecfb680847fcc0515db58",
+      "width": 300,
+      "height": 300,
+      "bitDepth": 8,
+      "colorType": 6
+    },
+    {
+      "file": "listings/en/description.txt",
+      "bytes": 2323,
+      "sha256": "44fa641804d8cfa28876d8348e0e49941d37ab63a631e405922543b65c504bec"
+    },
+    {
+      "file": "listings/en/name.txt",
+      "bytes": 30,
+      "sha256": "a28502438a0ca36bcaa388ee2b9233e1cd6c11897fb701c95652153e4aecb5cd"
+    },
+    {
+      "file": "listings/en/short-description.txt",
+      "bytes": 88,
+      "sha256": "bde946fd3d9ea09c6031633a07b573bed68ca67526d9ac829ba5e5fdea19cfb3"
+    },
+    {
+      "file": "listings/zh_CN/description.txt",
+      "bytes": 2079,
+      "sha256": "83d655cf48f91fe0361e24ca10cd35c218166037e2c4d3406d792105f7e40911"
+    },
+    {
+      "file": "listings/zh_CN/name.txt",
+      "bytes": 39,
+      "sha256": "1c789115140015f9fe7d634265a2176ce3bfa62f7135cc0510aef9c7d5dd2680"
+    },
+    {
+      "file": "listings/zh_CN/short-description.txt",
+      "bytes": 112,
+      "sha256": "e936186add1fcd4fcfcca9c5ae556a08d408796e8d9e54720f05cf8ffff10413"
+    },
+    {
+      "file": "package/leafmark-v1.0.0.zip",
+      "bytes": 84903,
+      "sha256": "edf73777f1e164cb0e41ad897783d65c5dfc0bf9004fae1f187f2efd74ef4f2f"
+    },
+    {
+      "file": "privacy/PRIVACY.md",
+      "bytes": 6495,
+      "sha256": "ebdc6c2d62595badcb9432192c13f166ed52fb8b76b1b808b505cb94f707d65a"
+    },
+    {
+      "file": "privacy/privacy-policy.html",
+      "bytes": 7635,
+      "sha256": "bca620fdcbc3de56e1705fb9424f85a2562dad1e8efaef8608da23d7459ff234"
+    },
+    {
+      "file": "promo/marquee-1400x560.png",
+      "bytes": 482308,
+      "sha256": "4f1904dbf6bc345999f517281a7e629a6256d96709370d7d5e4254862d6ab987",
+      "width": 1400,
+      "height": 560,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "promo/small-440x280.png",
+      "bytes": 103173,
+      "sha256": "8c95962eb532778706f6cc7475ef3ffa4730ce8da944865b06302fae10ba38be",
+      "width": 440,
+      "height": 280,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/en/01-home-light.png",
+      "bytes": 220506,
+      "sha256": "f7051f629b12e1a997a67050cb16d3cd07f1fa7342f0297b048bbb13c6576980",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/en/02-home-dark.png",
+      "bytes": 374014,
+      "sha256": "1a5b23c2705d641e8269ff42eb7ead3bd903c67c1e82ac21bd62f5d214ccd6eb",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/en/03-folder-preview.png",
+      "bytes": 216476,
+      "sha256": "e23e4ede529e2c156df1a4ef65ca9cecbeaa569e653ceba1a1501cdfd399481c",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/en/04-duplicates.png",
+      "bytes": 145918,
+      "sha256": "46cc399c4701f320a1ad68a48648adbd86550741c9cdf4fb9271d551a49360f7",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/en/05-settings.png",
+      "bytes": 273645,
+      "sha256": "0f5f1ae6fbd36c9bb385b584569e3238c9a5f268da95f305fe0093d02d3a9348",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/zh_CN/01-home-light.png",
+      "bytes": 220081,
+      "sha256": "e7b9f831867981d85c3a72739f94f8130b032636d905d9f79666338ee3ed7906",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/zh_CN/02-home-dark.png",
+      "bytes": 372412,
+      "sha256": "42abfb6edca6943c9eb7f24ef9c614cc0eff9df225393a14de00b3724637c80d",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/zh_CN/03-folder-preview.png",
+      "bytes": 216527,
+      "sha256": "230c4bf9a52ffd89a7c0969c9544e75dd5ac9c5971dc2254e833fd1b448d2c4b",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/zh_CN/04-duplicates.png",
+      "bytes": 159689,
+      "sha256": "06773346a1f0a56befe561a92b6cd2adad2da1a05f766eacf389d091a42227f2",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "screenshots/zh_CN/05-settings.png",
+      "bytes": 276979,
+      "sha256": "7b5aa1f1963e5afa02362d0173ded075e6ab5cef4234b1653f9a466e6bf8dfa3",
+      "width": 1280,
+      "height": 800,
+      "bitDepth": 8,
+      "colorType": 2
+    },
+    {
+      "file": "source/README.md",
+      "bytes": 1587,
+      "sha256": "a7572d85fa682d01727d2adfe29b407971fefeb496b1956ea23632f3b59dc81a"
+    },
+    {
+      "file": "source/demo-data.mjs",
+      "bytes": 3432,
+      "sha256": "40e856c8dd7c5a1271cb1ff37fb9351797ad97277f39ac2764b4596223775023"
+    },
+    {
+      "file": "source/promo.html",
+      "bytes": 2676,
+      "sha256": "eb83ad11d1c6f881aad4896a4fcc647e799cab58a3c98ab634da9fa9851ac605"
+    },
+    {
+      "file": "submission-notes.md",
+      "bytes": 4407,
+      "sha256": "9d151b9616a7788b809dc5e4e4c40ee8abe85adc2e2faf90a450a95ec200120e"
+    }
+  ]
+}

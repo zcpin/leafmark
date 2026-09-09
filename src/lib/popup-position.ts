@@ -21,6 +21,14 @@ export interface PopupPosition {
   top: number
 }
 
+/** 卡片网格按视口分页：预留边距、面板内边距和 40px 翻页区。 */
+export function popupPageSize(viewport: ViewportSize, cardHeight: number): number {
+  const contentWidth = Math.min(520, viewport.width - 48)
+  const columns = Math.max(1, Math.floor((contentWidth + 10) / 160))
+  const rows = Math.max(1, Math.floor((viewport.height - 16 - 24 - 40 + 10) / (cardHeight + 10)))
+  return columns * rows
+}
+
 /**
  * 计算主面板/级联面板的位置，并在视口边缘翻转或内收。
  * 主面板默认向下，级联面板默认向右；margin 与现有交互规格保持一致。

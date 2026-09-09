@@ -10,14 +10,20 @@ export async function storageGet<T>(
   fallback: T,
   area: StorageAreaName = 'sync',
 ): Promise<T> {
+  const values = await storageGetMany({ [key]: fallback }, area)
+  return values[key] as T
+}
+
+/** 同一区域的设置一次读取，避免逐键往返浏览器进程。 */
+export async function storageGetMany<T extends Record<string, unknown>>(defaults: T, area: StorageAreaName = 'sync'): Promise<T> {
   if (!isExtensionEnv()) {
-    const raw = localStorage.getItem(key)
-    return raw === null ? fallback : (JSON.parse(raw) as T)
+    return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => {
+      const raw = localStorage.getItem(key)
+      return [key, raw === null ? fallback : JSON.parse(raw) ?? fallback]
+    })) as T
   }
-  return callChrome<Record<string, unknown>>((cb) => {
-    // 传入 {key: fallback} 对象形式，chrome 会用默认值补齐缺失键
-    chrome.storage[area].get({ [key]: fallback }, cb)
-  }).then((items) => (items[key] ?? fallback) as T)
+  const items = await callChrome<Record<string, unknown>>((cb) => chrome.storage[area].get(defaults, cb))
+  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, items[key] ?? fallback])) as T
 }
 
 export async function storageSet(
@@ -25,11 +31,15 @@ export async function storageSet(
   value: unknown,
   area: StorageAreaName = 'sync',
 ): Promise<void> {
+  return storageSetMany({ [key]: value }, area)
+}
+
+export async function storageSetMany(values: Record<string, unknown>, area: StorageAreaName = 'sync'): Promise<void> {
   if (!isExtensionEnv()) {
-    localStorage.setItem(key, JSON.stringify(value))
+    for (const [key, value] of Object.entries(values)) localStorage.setItem(key, JSON.stringify(value))
     return
   }
-  return callChrome<void>((cb) => chrome.storage[area].set({ [key]: value }, cb))
+  return callChrome<void>((cb) => chrome.storage[area].set(values, cb))
 }
 
 /** 监听指定区域的存储变更，返回取消订阅函数（设置页与多视图同步用） */

@@ -66,6 +66,7 @@ function show() {
   open.value = true
 }
 function hide() {
+  reportSave(settings.flushAppearance())
   open.value = false
 }
 
@@ -117,7 +118,7 @@ async function onFileChange(e: Event) {
     const raw = await readFileAsDataUrl(file)
     const { dataUrl } = await compressWallpaper(raw)
     await settings.setUserWallpaper(dataUrl)
-    ui.toast(t('wallpaperUploadError').replace('失败，请重试', '已设置'))
+    ui.toast(t('wallpaperUploadSuccess'))
   } catch {
     ui.toast(t('wallpaperUploadError'))
   } finally {
@@ -126,37 +127,37 @@ async function onFileChange(e: Event) {
 }
 
 // —— 布局滑块 ——
+let lastSaveError: unknown
+function reportSave(pending: Promise<void>) {
+  void pending.catch((error: unknown) => {
+    if (lastSaveError === error) return
+    lastSaveError = error
+    ui.toast(t('appearanceSaveFailed'))
+  })
+}
+
 const cardWidth = computed({
   get: () => settings.layout.cardWidth,
-  set: (v: number) => void settings.setLayout({ cardWidth: v }),
+  set: (v: number) => reportSave(settings.setLayout({ cardWidth: v })),
 })
 const cardHeight = computed({
   get: () => settings.layout.cardHeight,
-  set: (v: number) => void settings.setLayout({ cardHeight: v }),
+  set: (v: number) => reportSave(settings.setLayout({ cardHeight: v })),
 })
 const containerWidth = computed({
   get: () => settings.layout.containerWidth,
-  set: (v: number) => void settings.setLayout({ containerWidth: v }),
+  set: (v: number) => reportSave(settings.setLayout({ containerWidth: v })),
 })
 
-const openInNewTab = computed({
-  get: () => settings.openInNewTab,
-  set: (v: boolean) => void settings.setOpenInNewTab(v),
-})
-
-const reduceEffects = computed({
-  get: () => settings.reduceEffects,
-  set: (v: boolean) => void settings.setReduceEffects(v),
-})
-
-async function onTransparencyInput(event: Event) {
+function onBooleanChange(key: 'openInNewTab' | 'reduceEffects', event: Event) {
   const input = event.target as HTMLInputElement
-  try {
-    await settings.setGlassTransparency(Number(input.value))
-  } catch {
-    input.value = String(settings.glassTransparency)
-    ui.toast(t('appearanceSaveFailed'))
-  }
+  const pending = key === 'openInNewTab' ? settings.setOpenInNewTab(input.checked) : settings.setReduceEffects(input.checked)
+  void pending.catch(() => { input.checked = settings[key] })
+  reportSave(pending)
+}
+
+function onTransparencyInput(event: Event) {
+  reportSave(settings.setGlassTransparency(Number((event.target as HTMLInputElement).value)))
 }
 
 const themeLabel = computed(() =>
@@ -182,6 +183,7 @@ const themeLabel = computed(() =>
           <button
             type="button"
             class="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-500/10 dark:hover:bg-white/10"
+            :aria-label="t('close')"
             @click="hide"
           >
             <Icon name="x" />
@@ -213,7 +215,7 @@ const themeLabel = computed(() =>
               <button
                 type="button"
                 class="glass flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-sm"
-                @click="settings.cycleTheme()"
+                @click="reportSave(settings.cycleTheme())"
               >
                 <span class="text-slate-700 dark:text-slate-200">{{ themeLabel }}</span>
                 <Icon :name="settings.theme === 'dark' ? 'moon' : settings.theme === 'light' ? 'sun' : 'monitor'" />
@@ -234,6 +236,7 @@ const themeLabel = computed(() =>
                 step="5"
                 class="w-full accent-emerald-500"
                 @input="onTransparencyInput"
+                @change="reportSave(settings.flushAppearance())"
               />
               <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 {{ t('glassTransparencyHint') }}
@@ -250,7 +253,7 @@ const themeLabel = computed(() =>
                   class="h-16 overflow-hidden rounded-lg ring-2 ring-transparent transition-all hover:ring-emerald-400/60"
                   :class="{ 'ring-emerald-500': settings.bgKind === 'wallpaper' && settings.wallpaperId === p.id }"
                   :title="p.title"
-                  @click="settings.setPresetWallpaper(p.id, p.url)"
+                  @click="reportSave(settings.setPresetWallpaper(p.id, p.url))"
                 >
                   <img :src="p.url" :alt="p.title" class="size-full object-cover" />
                 </button>
@@ -273,7 +276,7 @@ const themeLabel = computed(() =>
                   class="h-12 rounded-lg ring-2 ring-transparent transition-all hover:ring-emerald-400/60"
                   :class="[s.cls, { 'ring-emerald-500': settings.bgKind === 'solid' && settings.solidBg === s.cls }]"
                   :title="s.label"
-                  @click="settings.setSolidBg(s.cls)"
+                  @click="reportSave(settings.setSolidBg(s.cls))"
                 />
               </div>
             </section>
@@ -292,19 +295,19 @@ const themeLabel = computed(() =>
               <div class="mb-1 flex justify-between text-xs text-slate-500">
                 <span>{{ t('cardWidth') }}</span><span class="tabular-nums">{{ cardWidth }}px</span>
               </div>
-              <input v-model.number="cardWidth" type="range" min="140" max="280" step="10" class="w-full accent-emerald-500" />
+              <input v-model.number="cardWidth" type="range" min="140" max="280" step="10" class="w-full accent-emerald-500" @change="reportSave(settings.flushAppearance())" />
             </label>
             <label class="block">
               <div class="mb-1 flex justify-between text-xs text-slate-500">
                 <span>{{ t('cardHeight') }}</span><span class="tabular-nums">{{ cardHeight }}px</span>
               </div>
-              <input v-model.number="cardHeight" type="range" min="40" max="80" step="2" class="w-full accent-emerald-500" />
+              <input v-model.number="cardHeight" type="range" min="40" max="80" step="2" class="w-full accent-emerald-500" @change="reportSave(settings.flushAppearance())" />
             </label>
             <label class="block">
               <div class="mb-1 flex justify-between text-xs text-slate-500">
                 <span>{{ t('containerWidth') }}</span><span class="tabular-nums">{{ containerWidth }}%</span>
               </div>
-              <input v-model.number="containerWidth" type="range" min="60" max="100" step="5" class="w-full accent-emerald-500" />
+              <input v-model.number="containerWidth" type="range" min="60" max="100" step="5" class="w-full accent-emerald-500" @change="reportSave(settings.flushAppearance())" />
             </label>
           </div>
 
@@ -342,11 +345,11 @@ const themeLabel = computed(() =>
             </section>
             <label class="glass flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-3">
               <span class="text-sm text-slate-700 dark:text-slate-200">{{ t('settingsOpenInNewTab') }}</span>
-              <input v-model="openInNewTab" type="checkbox" class="size-4 accent-emerald-500" />
+              <input :checked="settings.openInNewTab" type="checkbox" class="size-4 accent-emerald-500" @change="onBooleanChange('openInNewTab', $event)" />
             </label>
             <label class="glass flex w-full cursor-pointer items-center justify-between rounded-xl px-4 py-3">
               <span class="text-sm text-slate-700 dark:text-slate-200">{{ t('settingsReduceEffects') }}</span>
-              <input v-model="reduceEffects" type="checkbox" class="size-4 accent-emerald-500" />
+              <input :checked="settings.reduceEffects" type="checkbox" class="size-4 accent-emerald-500" @change="onBooleanChange('reduceEffects', $event)" />
             </label>
           </div>
         </div>

@@ -9,9 +9,17 @@ export interface UndoNode {
   url?: string
   children?: UndoNode[]
   restoredId?: string
+  /** 创建前持久化的意图，用于核对“创建成功但回写中断”的节点。 */
+  pendingCreate?: { parentId: string; siblingIds: string[] }
 }
 export interface UndoEntry { parentId: string; index: number; node: UndoNode }
-export interface UndoRecord { id: string; entries: UndoEntry[]; previous?: UndoEntry[] }
+export interface UndoRecord {
+  id: string
+  entries: UndoEntry[]
+  restoredIds?: string[]
+  previous?: UndoEntry[]
+  previousRestoredIds?: string[]
+}
 
 function snapshot(node: BookmarkNode): UndoNode {
   return { id: node.id, title: node.title, ...(node.url !== undefined ? { url: node.url } : { children: (node.children ?? []).map(snapshot) }) }

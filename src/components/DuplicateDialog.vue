@@ -1,35 +1,21 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 import { t } from '@/lib/i18n'
 import { openUrl } from '@/lib/tabs'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useDuplicatesStore } from '@/stores/duplicates'
-import { useUiStore } from '@/stores/ui'
 import Icon from './Icon.vue'
 import UndoDeleteButton from './UndoDeleteButton.vue'
 
 const duplicates = useDuplicatesStore()
 const bookmarks = useBookmarksStore()
-const ui = useUiStore()
-const panel = ref<HTMLElement>()
-watch(() => duplicates.open, async (open) => { if (open) { await nextTick(); panel.value?.focus() } })
-function onKeydown(event: KeyboardEvent) {
-  if (ui.confirmVisible) return
-  if (event.key === 'Escape') { event.preventDefault(); duplicates.hide() }
-  if (event.key !== 'Tab') return
-  const buttons = Array.from(panel.value?.querySelectorAll<HTMLElement>('button, input') ?? [])
-    .filter((item) => !item.hasAttribute('disabled') && item.offsetParent !== null)
-  const first = buttons[0]
-  const last = buttons[buttons.length - 1]
-  if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.value)) { event.preventDefault(); last?.focus() }
-  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
-}
+const { setPanel } = useDialogFocus(() => duplicates.open, () => duplicates.hide())
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="duplicates.open" class="fixed inset-0 z-[85] flex items-center justify-center bg-slate-900/35 p-4" @click.self="duplicates.hide()">
-      <section ref="panel" role="dialog" aria-modal="true" aria-labelledby="duplicate-title" tabindex="-1" class="glass-strong flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl text-slate-700 outline-none dark:text-slate-200" @keydown="onKeydown">
+      <section :ref="setPanel" role="dialog" aria-modal="true" aria-labelledby="duplicate-title" tabindex="-1" class="glass-strong flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl text-slate-700 outline-none dark:text-slate-200">
         <header class="flex items-start justify-between gap-4 border-b border-slate-400/15 p-5">
           <div><h2 id="duplicate-title" class="text-lg font-semibold">{{ t('duplicateTitle') }}</h2><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ t('duplicateHint') }}</p></div>
           <button type="button" :disabled="duplicates.busy" :aria-label="t('close')" class="rounded-lg p-2 hover:bg-slate-500/10" @click="duplicates.hide()"><Icon name="x" /></button>

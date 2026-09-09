@@ -25,17 +25,25 @@ import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useStatsStore } from '@/stores/stats'
+import { useUiStore } from '@/stores/ui'
 
 const settings = useSettingsStore()
 const bookmarks = useBookmarksStore()
 const stats = useStatsStore()
 const now = useNow()
 const deletions = useDeletionsStore()
+const ui = useUiStore()
+
+function loadSettings() { void settings.init().catch(() => {}) }
+async function cycleTheme() {
+  try { await settings.cycleTheme() }
+  catch { ui.toast(t('appearanceSaveFailed')) }
+}
 
 const settingsPanel = ref<{ show: () => void } | null>(null)
 
 onMounted(() => {
-  void settings.init()
+  loadSettings()
   void bookmarks.init()
 })
 
@@ -83,7 +91,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
           type="button"
           class="rounded-lg p-2 transition-colors hover:bg-slate-500/10 dark:hover:bg-white/10"
           :title="themeTitle"
-          @click="settings.cycleTheme()"
+          @click="cycleTheme"
         >
           <Icon :name="themeIcon" />
         </button>
@@ -101,6 +109,10 @@ const greeting = computed(() => t(greetingKey(now.value)))
 
     <!-- 书签区按内容收拢，超出可用高度后在内部滚动 -->
     <main class="flex min-h-0 flex-1 flex-col items-center px-4 pt-[clamp(1.25rem,5vh,3rem)] sm:px-6">
+      <p v-if="settings.loadError" role="alert" class="mb-4 flex shrink-0 items-center gap-3 text-sm text-red-700 dark:text-red-300">
+        {{ t('settingsLoadFailed') }}
+        <button type="button" class="rounded-lg px-3 py-1 underline" @click="loadSettings">{{ t('retry') }}</button>
+      </p>
       <!-- 时钟 + 问候（常驻，不参与滚动） -->
       <div v-if="settings.display.clock" class="mb-6 flex shrink-0 flex-col items-center sm:mb-8">
         <Clock :now="now" />

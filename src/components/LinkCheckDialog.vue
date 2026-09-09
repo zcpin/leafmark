@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 import { t, type MessageKey } from '@/lib/i18n'
 import { checkableUrl, isUnreachable, normalizeLinkTimeout, type CheckedLink, type LinkStatus } from '@/lib/link-checker'
@@ -17,7 +18,7 @@ const checker = useLinkCheckerStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const bookmarks = useBookmarksStore()
-const panel = ref<HTMLElement>()
+const { setPanel } = useDialogFocus(() => checker.open, () => checker.hide())
 const timeout = ref(settings.linkCheckTimeout)
 const scopeId = ref(settings.linkCheckOptions.folderId ?? '')
 const ignoredText = ref(settings.linkCheckOptions.ignoredDomains.join('\n'))
@@ -27,20 +28,10 @@ const savingOptions = ref(false)
 const optionsError = ref('')
 const folders = computed(() => checkFolderOptions(bookmarks.tree))
 const filter = ref<'failed' | 'restricted' | 'all'>('failed')
-let previousFocus: HTMLElement | null = null
 
 watch(() => settings.linkCheckTimeout, (value) => { timeout.value = value })
 watch(() => settings.linkCheckOptions.folderId, (value) => { scopeId.value = value ?? '' })
 watch(savedIgnoredText, (value, old) => { if (ignoredText.value === old) ignoredText.value = value })
-watch(() => checker.open, async (visible) => {
-  if (visible) {
-    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    await nextTick()
-    panel.value?.focus()
-  } else {
-    previousFocus?.focus()
-  }
-})
 onBeforeUnmount(() => checker.stop())
 
 const visibleResults = computed(() => filter.value === 'failed' ? checker.failed
@@ -100,38 +91,18 @@ async function saveIgnoredDomains() {
   } catch { optionsError.value = t('linkCheckOptionsFailed') }
   finally { savingOptions.value = false }
 }
-function onKeydown(event: KeyboardEvent) {
-  if (ui.confirmVisible) return
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    checker.hide()
-  } else if (event.key === 'Tab') {
-    const controls = Array.from(panel.value?.querySelectorAll<HTMLElement>('button, input, select, textarea, [href]') ?? [])
-      .filter((element) => !element.hasAttribute('disabled') && element.offsetParent !== null)
-    const first = controls[0]
-    const last = controls[controls.length - 1]
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.value)) {
-      event.preventDefault()
-      last?.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first?.focus()
-    }
-  }
-}
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="checker.open" class="fixed inset-0 z-[85] flex items-center justify-center bg-slate-900/35 p-4" @click.self="checker.hide()">
       <section
-        ref="panel"
+        :ref="setPanel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="link-check-title"
         tabindex="-1"
         class="glass-strong flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl text-slate-700 outline-none dark:text-slate-200"
-        @keydown="onKeydown"
       >
         <header class="flex shrink-0 items-start justify-between gap-4 border-b border-slate-400/15 p-5">
           <div>

@@ -10,17 +10,18 @@ import {
   onBeforeUnmount,
   provide,
   ref,
+  useId,
   watch,
-  type InjectionKey,
 } from 'vue'
 
 import { useHoverIntent } from '@/composables/useHoverIntent'
+import { POPUP_CONTEXT } from '@/composables/popup-context'
 import { executeBookmarkAction } from '@/lib/bookmark-actions'
 import { cardDropZone, resolveCardDrop, type CardDropZone } from '@/lib/drag-utils'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
 import { openAllInGroup, openUrl } from '@/lib/tabs'
-import { computePopupPosition } from '@/lib/popup-position'
+import { computePopupPosition, popupPageSize } from '@/lib/popup-position'
 import { isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -30,11 +31,6 @@ import { useDeletionsStore } from '@/stores/deletions'
 
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
 import Icon from './Icon.vue'
-
-/** 面板上下文：面板内的卡片打开书签 / 按 Esc / 滚动时，向上逐级关闭整链弹窗 */
-const POPUP_CHAIN: InjectionKey<() => void> = Symbol('popup-chain')
-/** 是否处于弹出面板内（级联层的展开方向为右侧） */
-const IN_POPUP: InjectionKey<boolean> = Symbol('in-popup')
 
 const props = defineProps<{ node: BookmarkNode }>()
 
@@ -50,14 +46,28 @@ const cardEl = ref<HTMLElement>()
 const intent = useHoverIntent()
 
 // —— 面板上下文注入（对面板内的子卡片生效）——
-const closeChain = inject(POPUP_CHAIN, null)
-const inPopup = inject(IN_POPUP, false)
+const parentPopup = inject(POPUP_CONTEXT, null)
+const rootId = parentPopup?.rootId ?? useId()
+const inPopup = parentPopup !== null
 
-provide(POPUP_CHAIN, () => {
+function closeChain(restoreFocus = false) {
   intent.closeNow()
-  closeChain?.()
-})
-provide(IN_POPUP, true)
+  if (parentPopup) parentPopup.close(restoreFocus)
+  else if (restoreFocus) cardEl.value?.focus()
+}
+
+function enterPopup() {
+  intent.enter()
+  parentPopup?.enter()
+}
+
+function leavePopup() {
+  if (bookmarks.draggingId) return
+  intent.leave()
+  parentPopup?.leave()
+}
+
+provide(POPUP_CONTEXT, { rootId, enter: enterPopup, leave: leavePopup, close: closeChain })
 
 // favicon：扩展环境走 _favicon；开发预览/加载失败回退首字母头像（零网络请求）
 const favFailed = ref(false)
@@ -78,7 +88,7 @@ function onOpenBookmark(event?: MouseEvent | KeyboardEvent) {
   if (shortcut) openUrl(props.node.url, true, !!event.shiftKey)
   else {
     openUrl(props.node.url, settings.openInNewTab)
-    closeChain?.()
+    closeChain()
   }
 }
 
@@ -100,8 +110,8 @@ function onCardKeydown(event: KeyboardEvent) {
     if (isDir.value) onFolderClick()
     else onOpenBookmark(event)
   } else if (event.key === 'Escape') {
-    intent.closeNow()
-    closeChain?.()
+    event.preventDefault()
+    closeChain(true)
   }
 }
 
@@ -179,6 +189,19 @@ async function onDrop(e: DragEvent) {
 // —— A9 弹出面板定位：主页面卡片在下方展开，级联层在右侧；视口边缘翻转 ——
 const panelEl = ref<HTMLElement>()
 const panelPos = ref<Record<string, string>>({ visibility: 'hidden' })
+const panelPage = ref(0)
+const pageSize = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(children.value.length / pageSize.value)))
+const pageChildren = computed(() => children.value.slice(panelPage.value * pageSize.value, (panelPage.value + 1) * pageSize.value))
+
+function updatePanelSize() {
+  if (!intent.isOpen.value) return
+  pageSize.value = popupPageSize({ width: window.innerWidth, height: window.innerHeight }, settings.layout.cardHeight)
+  panelPage.value = Math.min(panelPage.value, pageCount.value - 1)
+  void nextTick(() => { if (intent.isOpen.value) positionPanel() })
+}
+
+if (isDir.value) watch([children, () => settings.layout.cardHeight, panelPage], updatePanelSize)
 
 function positionPanel() {
   const el = panelEl.value
@@ -199,33 +222,49 @@ function positionPanel() {
 }
 
 function onPanelKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeChain?.()
+  if (e.key === 'Escape' && !e.defaultPrevented) {
+    e.preventDefault()
+    closeChain(true)
+  }
 }
 
 function onPanelScroll() {
   if (bookmarks.draggingId) return
-  closeChain?.()
+  closeChain()
+}
+
+function onOutsidePointer(e: PointerEvent) {
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('[data-popup-chain]')?.getAttribute('data-popup-chain') !== rootId) closeChain()
 }
 
 watch(
   () => intent.isOpen.value,
-  async (open) => {
-    if (open) {
-      await nextTick()
+  (open, _previous, onCleanup) => {
+    if (!open) return
+    panelPage.value = 0
+    updatePanelSize()
+    let active = true
+    onCleanup(() => {
+      active = false
+      window.removeEventListener('keydown', onPanelKeydown)
+      window.removeEventListener('scroll', onPanelScroll, true)
+      window.removeEventListener('pointerdown', onOutsidePointer)
+      window.removeEventListener('resize', updatePanelSize)
+    })
+    void nextTick(() => {
+      if (!active) return
       positionPanel()
       window.addEventListener('keydown', onPanelKeydown)
       window.addEventListener('scroll', onPanelScroll, { capture: true, passive: true })
-    } else {
-      window.removeEventListener('keydown', onPanelKeydown)
-      window.removeEventListener('scroll', onPanelScroll, true)
-    }
+      window.addEventListener('pointerdown', onOutsidePointer)
+      window.addEventListener('resize', updatePanelSize)
+    })
   },
 )
 
 onBeforeUnmount(() => {
   if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
-  window.removeEventListener('keydown', onPanelKeydown)
-  window.removeEventListener('scroll', onPanelScroll, true)
 })
 
 // —— 右键菜单 ——
@@ -260,6 +299,7 @@ const menuItems = computed<MenuItem[]>(() =>
 
 async function onMenuSelect(key: string) {
   menu.value = null
+  cardEl.value?.focus()
   await executeBookmarkAction(key, {
     node: props.node,
     isFolder: isDir.value,
@@ -282,6 +322,7 @@ async function onMenuSelect(key: string) {
       'ring-2 ring-emerald-500/60 opacity-50': dragging,
     }"
     :data-drop-zone="dropZone"
+    :data-popup-chain="rootId"
     :role="isDir ? 'button' : 'link'"
     :aria-label="props.node.title"
     :aria-expanded="isDir ? intent.isOpen.value : undefined"
@@ -289,8 +330,8 @@ async function onMenuSelect(key: string) {
     style="height: var(--lm-card-height, 48px)"
     draggable="true"
     @contextmenu="onContextMenu"
-    @mouseenter="isDir && !bookmarks.draggingId && intent.enter()"
-    @mouseleave="isDir && !bookmarks.draggingId && intent.leave()"
+    @mouseenter="isDir && !bookmarks.draggingId && enterPopup()"
+    @mouseleave="isDir && leavePopup()"
     @click="onCardClick"
     @auxclick="onAuxClick"
     @mousedown.middle.prevent
@@ -343,10 +384,11 @@ async function onMenuSelect(key: string) {
       <div
         v-if="isDir && intent.isOpen.value && cardEl"
         ref="panelEl"
+        :data-popup-chain="rootId"
         class="glass-strong fixed z-40 rounded-2xl p-3"
         :style="panelPos"
-        @mouseenter="intent.enter"
-        @mouseleave="!bookmarks.draggingId && intent.leave()"
+        @mouseenter="enterPopup"
+        @mouseleave="leavePopup"
         @contextmenu.prevent
       >
         <div
@@ -360,11 +402,16 @@ async function onMenuSelect(key: string) {
           class="grid gap-2.5"
           style="
             width: min(520px, calc(100vw - 48px));
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
           "
         >
-          <BookmarkCard v-for="child in children" :key="child.id" :node="child" />
+          <BookmarkCard v-for="child in pageChildren" :key="child.id" :node="child" />
         </div>
+        <nav v-if="pageCount > 1" :aria-label="t('folderPages')" class="mt-3 flex h-7 items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <button type="button" :aria-label="t('previousPage')" :disabled="panelPage === 0" class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30" @click="panelPage--">‹</button>
+          <span aria-live="polite" :aria-label="t('folderPage', { page: panelPage + 1, total: pageCount })">{{ panelPage + 1 }} / {{ pageCount }}</span>
+          <button type="button" :aria-label="t('nextPage')" :disabled="panelPage === pageCount - 1" class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30" @click="panelPage++">›</button>
+        </nav>
       </div>
     </Teleport>
 

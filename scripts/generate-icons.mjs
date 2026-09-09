@@ -4,7 +4,7 @@
 import { deflateSync } from 'node:zlib'
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons')
 
@@ -95,8 +95,9 @@ const BG_TOP = [52, 211, 153] // #34d399
 const BG_BOTTOM = [5, 150, 105] // #059669
 const VEIN = [5, 150, 105]
 
-function render(size) {
+export function renderIcon(size, padding = 0) {
   const rgba = Buffer.alloc(size * size * 4)
+  const artworkSize = size - padding * 2
   const ss = size >= 48 ? 3 : 2 // 超采样倍率（抗锯齿）
   const radius = size < 32 ? 0.3 : 0.22
   const hw = size < 32 ? 0.16 : 0.17 // 叶半宽（归一化）
@@ -105,6 +106,7 @@ function render(size) {
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      if (x < padding || y < padding || x >= size - padding || y >= size - padding) continue
       let bgA = 0
       let leafA = 0
       let veinA = 0
@@ -112,8 +114,8 @@ function render(size) {
       const samples = ss * ss
       for (let sy = 0; sy < ss; sy++) {
         for (let sx = 0; sx < ss; sx++) {
-          const u = (x + (sx + 0.5) / ss) / size
-          const v = (y + (sy + 0.5) / ss) / size
+          const u = (x - padding + (sx + 0.5) / ss) / artworkSize
+          const v = (y - padding + (sy + 0.5) / ss) / artworkSize
           if (inRoundedRect(u, v, radius)) {
             bgA++
             grad += (u + v) / 2 // 对角渐变位置
@@ -153,9 +155,11 @@ function render(size) {
   return encodePng(size, rgba)
 }
 
-for (const size of [16, 48, 128]) {
-  const png = render(size)
-  const file = join(outDir, `icon-${size}.png`)
-  writeFileSync(file, png)
-  console.log(`✓ ${file} (${png.length} bytes)`)
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  for (const size of [16, 48, 128]) {
+    const png = renderIcon(size, size === 128 ? 16 : 0)
+    const file = join(outDir, `icon-${size}.png`)
+    writeFileSync(file, png)
+    console.log(`✓ ${file} (${png.length} bytes)`)
+  }
 }

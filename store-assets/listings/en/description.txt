@@ -1,0 +1,31 @@
+Bring your bookmarks back into view.
+
+Leafmark replaces your new tab with a clean, customizable view of your browser bookmarks. Choose a folder as your home, preview nested folders, and organize the links you already saved.
+
+BOOKMARKS WITHIN REACH
+• Preview folders on hover, including nested folders. Large folders are paginated to fit your screen.
+• Edit, reorder, move, copy, and delete bookmarks directly in your browser's bookmark tree.
+• Undo the most recent deletion, including folders and cleanup batches.
+• Find duplicate bookmarks by exact URL, see their locations, and choose which copies to keep.
+• Open an entire folder in a named tab group. Ctrl/Command-click or middle-click to open a link in the background.
+• Generate and download bookmark QR codes locally.
+
+OPTIONAL LINK CHECKS
+Start a check when you need one. Choose all bookmarks or a folder, set a 3–60 second timeout, and exclude domains. Review unavailable or restricted results, open links to confirm, and choose what to remove. Website access is requested when you start a check.
+
+MAKE THE PAGE YOURS
+• Light, dark, and system themes.
+• Three bundled wallpapers, your own image, or gradient backgrounds.
+• Adjustable card dimensions, page width, and panel transparency.
+• Optional clock, date, greeting, year progress, and bookmark count.
+• English and Simplified Chinese interfaces.
+• Keyboard-friendly dialogs with focus restoration.
+
+DATA AND PRIVACY
+No developer account, ads, analytics, or developer data-upload service. Settings may sync through your browser's own sync service. Uploaded wallpapers, the latest deletion snapshot, and link-check options stay in extension storage on your device.
+
+Link checks send requests directly to bookmarked websites after your action and permission. These websites can receive the requested URL and normal network metadata such as your IP address. Check requests omit cookies and referrers, and results stay in the current page's memory. Leafmark does not load or execute remote code.
+
+Requires Chrome or Microsoft Edge 111 or newer. Link-check results describe a particular network request; login requirements, temporary failures, and rate limits can affect the result. Please review links before deleting them.
+
+Support and feedback: https://github.com/zcpin/leafmark/issues

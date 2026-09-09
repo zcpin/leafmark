@@ -1,4 +1,4 @@
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { useBookmarksStore } from '@/stores/bookmarks'
@@ -93,5 +93,101 @@ describe('最近一次删除撤销', () => {
     expect(chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.title === 'MDN')).toHaveLength(1)
     expect(useBookmarksStore().currentChildren.length).toBeGreaterThan(0)
     deletions.dispose()
+  })
+
+  it('两个新标签页同时撤销，只恢复一份书签', async () => {
+    const firstPage = createPinia()
+    const first = useDeletionsStore(firstPage)
+    await first.remove([{ id: '100', url: 'https://github.com' }])
+    const secondPage = createPinia()
+    const second = useDeletionsStore(secondPage)
+    await second.init()
+    await Promise.all([first.undo(), second.undo()])
+    expect(chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.url === 'https://github.com')).toHaveLength(1)
+    expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(1)
+    first.dispose(); second.dispose()
+    useSettingsStore(firstPage).dispose(); useSettingsStore(secondPage).dispose()
+    disposePinia(firstPage); disposePinia(secondPage)
+  })
+
+  it('创建成功但进度保存失败，新页面重试时核对已创建节点', async () => {
+    const firstPage = createPinia()
+    const first = useDeletionsStore(firstPage)
+    await first.remove([{ id: '100', url: 'https://github.com' }])
+    const write = chromeMock.storage.local.set.getMockImplementation()!
+    let failed = false
+    chromeMock.storage.local.set.mockImplementation((items, callback) => {
+      if (!failed && chromeMock.bookmarks.create.mock.calls.length > 0) {
+        failed = true
+        chromeMock.runtime.lastError = { message: 'progress save failed' }
+        callback()
+        chromeMock.runtime.lastError = null
+      } else write(items, callback)
+    })
+    await first.undo()
+    expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(1)
+    chromeMock.storage.local.set.mockImplementation(write)
+    first.dispose(); useSettingsStore(firstPage).dispose(); disposePinia(firstPage)
+
+    const reopenedPage = createPinia()
+    const reopened = useDeletionsStore(reopenedPage)
+    await reopened.init()
+    await reopened.undo()
+    expect(chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.url === 'https://github.com')).toHaveLength(1)
+    expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(1)
+    expect(reopened.undoCount).toBe(0)
+    reopened.dispose(); useSettingsStore(reopenedPage).dispose(); disposePinia(reopenedPage)
+  })
+
+  it('不能保存恢复意图时不创建书签', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([{ id: '100', url: 'https://github.com' }])
+    chromeMock.storage.local.set.mockImplementationOnce((_items, callback) => {
+      chromeMock.runtime.lastError = { message: 'storage unavailable' }
+      callback()
+      chromeMock.runtime.lastError = null
+    })
+    await deletions.undo()
+    expect(chromeMock.bookmarks.create).not.toHaveBeenCalled()
+    expect(deletions.undoCount).toBe(1)
+    deletions.dispose()
+  })
+
+  it('原本相同的两份书签部分恢复后，重试仍保留两份', async () => {
+    chromeMock.bookmarks.update('101', { title: 'GitHub', url: 'https://github.com' }, () => {})
+    const firstPage = createPinia()
+    const first = useDeletionsStore(firstPage)
+    await first.remove([{ id: '100', url: 'https://github.com' }, { id: '101', url: 'https://github.com' }])
+    chromeMock.bookmarks.create.mockImplementationOnce((_details, callback) => {
+      chromeMock.runtime.lastError = { message: 'create failed' }
+      callback({ id: '', title: '' })
+      chromeMock.runtime.lastError = null
+    })
+    await first.undo()
+    expect(first.undoCount).toBe(1)
+    first.dispose(); useSettingsStore(firstPage).dispose(); disposePinia(firstPage)
+    const nextPage = createPinia()
+    const next = useDeletionsStore(nextPage)
+    await next.init()
+    await next.undo()
+    expect(chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.url === 'https://github.com')).toHaveLength(2)
+    expect(next.undoCount).toBe(0)
+    next.dispose(); useSettingsStore(nextPage).dispose(); disposePinia(nextPage)
+  })
+
+  it('恢复与另一页面的删除串行执行，保留最新删除记录', async () => {
+    const firstPage = createPinia()
+    const first = useDeletionsStore(firstPage)
+    await first.remove([{ id: '100', url: 'https://github.com' }])
+    const secondPage = createPinia()
+    const second = useDeletionsStore(secondPage)
+    await second.init()
+    await Promise.all([first.undo(), second.remove([{ id: '101', url: 'https://developer.mozilla.org' }])])
+    expect(chromeMock.bookmarks.__find('101')).toBeUndefined()
+    await second.undo()
+    expect(chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.url === 'https://developer.mozilla.org')).toHaveLength(1)
+    first.dispose(); second.dispose()
+    useSettingsStore(firstPage).dispose(); useSettingsStore(secondPage).dispose()
+    disposePinia(firstPage); disposePinia(secondPage)
   })
 })

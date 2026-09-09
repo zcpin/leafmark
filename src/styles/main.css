@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@source not '../../store-assets';
 
 /* 暗色变体绑定到 data-theme 属性（F1：浅/深/跟随系统由 JS 切换该属性） */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));

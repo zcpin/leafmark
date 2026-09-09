@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import { createBookmark, getChildren, removeBookmark } from '@/lib/chrome-bookmarks'
 import { onStorageChanged, storageGet, storageSet } from '@/lib/chrome-storage'
+import { withBookmarkLock } from '@/lib/bookmark-lock'
 import { deletionEntries, type DeletionResult, type DeletionTarget, type UndoEntry, type UndoNode, type UndoRecord } from '@/lib/bookmark-undo'
 import { findNode, isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
@@ -12,6 +13,7 @@ import { useSettingsStore } from './settings'
 import { useUiStore } from './ui'
 
 const KEY = 'bookmarkUndo'
+class UndoPersistenceError extends Error {}
 
 function saveRecord(value: UndoRecord | null) {
   return storageSet(KEY, value ? JSON.parse(JSON.stringify(value)) : null, 'local')
@@ -31,7 +33,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
     if (!value?.entries || !Array.isArray(value.entries)) return null
     const missing = value.entries.filter((entry) => !findNode(bookmarks.tree, entry.node.id))
     const entries = missing.length ? missing : (value.previous ?? []).filter((entry) => !findNode(bookmarks.tree, entry.node.id))
-    return entries.length ? { id: value.id, entries } : null
+    return entries.length ? { id: value.id, entries, restoredIds: missing.length ? value.restoredIds : value.previousRestoredIds } : null
   }
 
   function init(): Promise<void> {
@@ -63,83 +65,119 @@ export const useDeletionsStore = defineStore('deletions', () => {
     if (busy.value) throw new Error('Deletion in progress')
     busy.value = true
     try {
-      await bookmarks.load()
-      if (bookmarks.error) throw bookmarks.error
-      if (guard && !guard(bookmarks.tree)) throw new Error('Bookmarks changed')
-      const entries = deletionEntries(bookmarks.tree, targets)
-      const result: DeletionResult = { deleted: [], skipped: targets.length - entries.length, failed: 0 }
-      if (!entries.length) return result
-      const previous = record.value
-      const prepared: UndoRecord = { id: `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`, entries, previous: previous?.entries }
-      // 先持久化再删除；如果页面中断，可按原 id 是否存在恢复成功删除的项。
-      await saveRecord(prepared)
-      for (const entry of entries) {
-        try {
-          await removeBookmark(entry.node.id, entry.node.url === undefined)
-          result.deleted.push(entry.node.id)
-        } catch {
-          result.failed++
+      return await withBookmarkLock(async () => {
+        await bookmarks.load()
+        if (bookmarks.error) throw bookmarks.error
+        record.value = recover(await storageGet<UndoRecord | null>(KEY, null, 'local'))
+        if (guard && !guard(bookmarks.tree)) throw new Error('Bookmarks changed')
+        const entries = deletionEntries(bookmarks.tree, targets)
+        const result: DeletionResult = { deleted: [], skipped: targets.length - entries.length, failed: 0 }
+        if (!entries.length) return result
+        const previous = record.value
+        const prepared: UndoRecord = { id: `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`, entries, previous: previous?.entries, previousRestoredIds: previous?.restoredIds }
+        // 先持久化再删除；如果页面中断，可按原 id 是否存在恢复成功删除的项。
+        await saveRecord(prepared)
+        for (const entry of entries) {
+          try {
+            await removeBookmark(entry.node.id, entry.node.url === undefined)
+            result.deleted.push(entry.node.id)
+          } catch {
+            result.failed++
+          }
         }
-      }
-      record.value = result.deleted.length
-        ? { id: prepared.id, entries: entries.filter((entry) => result.deleted.includes(entry.node.id)) }
-        : previous
-      // 即使此处写入失败，预先保存的快照仍可恢复；未删除项通过原 id 过滤。
-      await saveRecord(record.value).catch(() => {})
-      await bookmarks.load()
-      return result
+        record.value = result.deleted.length
+          ? { id: prepared.id, entries: entries.filter((entry) => result.deleted.includes(entry.node.id)) }
+          : previous
+        // 即使此处写入失败，预先保存的快照仍可恢复；未删除项通过原 id 过滤。
+        await saveRecord(record.value).catch(() => {})
+        await bookmarks.load()
+        return result
+      })
     } finally {
       busy.value = false
     }
   }
 
-  async function restoreNode(node: UndoNode, parentId: string, index: number): Promise<void> {
-    const existing = node.restoredId ? findNode(bookmarks.tree, node.restoredId) : undefined
+  async function restoreNode(node: UndoNode, parentId: string, index: number, checkpoint: () => Promise<void>, claimed: Set<string>): Promise<void> {
+    const siblings = await getChildren(parentId)
+    let existing = node.restoredId
+      ? findNode(bookmarks.tree, node.restoredId) ?? siblings.find((sibling) => sibling.id === node.restoredId)
+      : undefined
     if (!existing) {
-      const siblings = await getChildren(parentId)
-      const created = await createBookmark({ parentId, index: Math.min(index, siblings.length), title: node.title, ...(node.url !== undefined ? { url: node.url } : {}) })
-      node.restoredId = created.id
+      if (node.pendingCreate?.parentId === parentId) {
+        const before = new Set(node.pendingCreate.siblingIds)
+        const candidates = siblings.filter((sibling) => !before.has(sibling.id) && !claimed.has(sibling.id) && sibling.title === node.title && sibling.url === node.url)
+        // 无法唯一识别时保留记录供重试，不能猜测或继续创建副本。
+        if (candidates.length > 1) throw new Error('Ambiguous restored bookmark')
+        existing = candidates[0]
+      }
+      if (!existing) {
+        node.pendingCreate = { parentId, siblingIds: siblings.map((sibling) => sibling.id) }
+        await checkpoint()
+        existing = await createBookmark({ parentId, index: Math.min(index, siblings.length), title: node.title, ...(node.url !== undefined ? { url: node.url } : {}) })
+      }
+      node.restoredId = existing.id
+      claimed.add(existing.id)
+      node.pendingCreate = undefined
+      await checkpoint()
     }
     if (settings.homeFolderId === node.id) await settings.setHomeFolderId(node.restoredId!)
     if (settings.linkCheckOptions.folderId === node.id) await settings.setLinkCheckOptions({ folderId: node.restoredId! })
     if (bookmarks.viewFolderId === node.id) bookmarks.setViewFolder(node.restoredId!)
     for (const [childIndex, child] of (node.children ?? []).entries()) {
-      await restoreNode(child, node.restoredId!, childIndex)
+      await restoreNode(child, node.restoredId!, childIndex, checkpoint, claimed)
     }
   }
 
   async function undo() {
     await init()
     if (busy.value || !record.value) return
+    const expectedId = record.value.id
     busy.value = true
     try {
-      const saved = await storageGet<UndoRecord | null>(KEY, null, 'local')
-      if (saved?.id !== record.value.id) {
+      await withBookmarkLock(async () => {
+        const saved = await storageGet<UndoRecord | null>(KEY, null, 'local')
         await bookmarks.load()
-        record.value = recover(saved)
-        ui.toast(t('undoRecordChanged'))
-        return
-      }
-      await bookmarks.load()
-      if (bookmarks.error) throw bookmarks.error
-      const pending: UndoEntry[] = []
-      let restored = 0
-      const entries = [...record.value.entries].sort((a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index)
-      for (const entry of entries) {
-        if (findNode(bookmarks.tree, entry.node.id)) continue
-        try {
-          const parent = findNode(bookmarks.tree, entry.parentId)
-          await restoreNode(entry.node, parent && isFolder(parent) ? parent.id : '1', entry.index)
-          restored++
-        } catch {
-          pending.push(entry)
+        if (bookmarks.error) throw bookmarks.error
+        if (saved?.id !== expectedId) {
+          record.value = recover(saved)
+          ui.toast(t('undoRecordChanged'))
+          return
         }
-      }
-      const nextRecord = pending.length ? { id: record.value.id, entries: pending } : null
-      await saveRecord(nextRecord)
-      record.value = nextRecord
-      await bookmarks.load()
-      ui.toast(t('undoResult', { n: restored, remaining: pending.length }))
+        const working = recover(saved)
+        record.value = working
+        if (!working) return
+        const claimed = new Set(working.restoredIds ?? [])
+        const checkpoint = async () => {
+          working.restoredIds = [...claimed]
+          try { await saveRecord(working) }
+          catch { throw new UndoPersistenceError('Cannot save restore progress') }
+        }
+        function collectRestored(node: UndoNode) {
+          if (node.restoredId) claimed.add(node.restoredId)
+          node.children?.forEach(collectRestored)
+        }
+        working.entries.forEach((entry) => collectRestored(entry.node))
+        const pending: UndoEntry[] = []
+        let restored = 0
+        const entries = [...working.entries].sort((a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index)
+        for (const entry of entries) {
+          if (findNode(bookmarks.tree, entry.node.id)) continue
+          try {
+            const parent = findNode(bookmarks.tree, entry.parentId)
+            await restoreNode(entry.node, parent && isFolder(parent) ? parent.id : '1', entry.index, checkpoint, claimed)
+            restored++
+          } catch (error) {
+            if (error instanceof UndoPersistenceError) throw error
+            pending.push(entry)
+          }
+        }
+        const nextRecord = pending.length ? { id: working.id, entries: pending, restoredIds: [...claimed] } : null
+        await saveRecord(nextRecord)
+        record.value = nextRecord
+        await bookmarks.load()
+        ui.toast(t('undoResult', { n: restored, remaining: pending.length }))
+      })
     } catch {
       ui.toast(t('undoFailed'))
     } finally {
