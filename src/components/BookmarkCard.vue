@@ -17,6 +17,7 @@ import {
 import { useHoverIntent } from '@/composables/useHoverIntent'
 import { POPUP_CONTEXT } from '@/composables/popup-context'
 import { executeBookmarkAction } from '@/lib/bookmark-actions'
+import { isMovableBookmark } from '@/lib/bookmark-move'
 import { cardDropZone, resolveCardDrop, type CardDropZone } from '@/lib/drag-utils'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
@@ -28,6 +29,7 @@ import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useDeletionsStore } from '@/stores/deletions'
+import { useSelectionStore } from '@/stores/selection'
 
 import ContextMenu, { type MenuItem } from './ContextMenu.vue'
 import Icon from './Icon.vue'
@@ -38,6 +40,9 @@ const bookmarks = useBookmarksStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const deletions = useDeletionsStore()
+const selection = useSelectionStore()
+const selected = computed(() => selection.selectedIds.includes(props.node.id))
+const selectable = computed(() => isMovableBookmark(props.node))
 
 const isDir = computed(() => isFolder(props.node))
 const children = computed(() => props.node.children ?? [])
@@ -94,17 +99,30 @@ function onOpenBookmark(event?: MouseEvent | KeyboardEvent) {
 
 function onCardClick(event: MouseEvent) {
   if (event.button !== 0) return
+  if (selection.active) {
+    event.preventDefault()
+    selection.toggle(props.node.id, event.shiftKey)
+    return
+  }
   if (isDir.value) onFolderClick()
   else { event.preventDefault(); onOpenBookmark(event) }
 }
 
 function onAuxClick(event: MouseEvent) {
+  if (selection.active) { event.preventDefault(); return }
   if (event.button !== 1 || isDir.value) return
   event.preventDefault()
   onOpenBookmark(event)
 }
 
 function onCardKeydown(event: KeyboardEvent) {
+  if (selection.active) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      selection.toggle(props.node.id, event.shiftKey)
+    }
+    return
+  }
   if (event.key === 'Enter' || (event.key === ' ' && isDir.value)) {
     event.preventDefault()
     if (isDir.value) onFolderClick()
@@ -125,6 +143,10 @@ function onFolderClick() {
 const dragging = ref(false)
 const dropZone = ref<CardDropZone | null>(null)
 
+watch(() => selection.active, (active) => {
+  if (active) { intent.closeNow(); menu.value = null; dropZone.value = null }
+})
+
 if (isDir.value) {
   watch(() => bookmarks.draggingId, (id, previous) => {
     if (previous && !id) intent.closeNow()
@@ -132,6 +154,7 @@ if (isDir.value) {
 }
 
 function onDragStart(e: DragEvent) {
+  if (selection.active) { e.preventDefault(); return }
   dragging.value = true
   bookmarks.draggingId = props.node.id
   intent.closeNow()
@@ -148,6 +171,7 @@ function onDragEnd() {
 }
 
 function onDragOver(e: DragEvent) {
+  if (selection.active) return
   const rect = cardEl.value?.getBoundingClientRect()
   if (!rect) return
   const zone = cardDropZone(e.clientX, rect.left, rect.width, isDir.value)
@@ -170,6 +194,7 @@ function onDragLeave(e: DragEvent) {
 /** 落点与视觉提示使用同一规则，目标位置来自实际父目录（包含级联面板）。 */
 async function onDrop(e: DragEvent) {
   e.preventDefault()
+  if (selection.active) return
   const sourceId = e.dataTransfer?.getData('text/plain')
   const rect = cardEl.value?.getBoundingClientRect()
   const zone = rect ? cardDropZone(e.clientX, rect.left, rect.width, isDir.value) : isDir.value ? 'inside' : 'after'
@@ -272,6 +297,7 @@ const menu = ref<{ x: number; y: number } | null>(null)
 
 function onContextMenu(e: MouseEvent) {
   e.preventDefault()
+  if (selection.active) return
   intent.closeNow()
   menu.value = { x: e.clientX, y: e.clientY }
 }
@@ -284,6 +310,7 @@ const menuItems = computed<MenuItem[]>(() =>
           : { key: 'home', label: t('setAsHome'), icon: 'home' },
         { key: 'openAll', label: t('openAll'), icon: 'externalLink' },
         { key: 'edit', label: t('edit'), icon: 'edit' },
+        ...(selectable.value ? [{ key: 'select', label: t('multiSelect'), icon: 'select' as const }] : []),
         { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
       ]
     : [
@@ -293,6 +320,7 @@ const menuItems = computed<MenuItem[]>(() =>
         { key: 'copy', label: t('copyUrl'), icon: 'copy' },
         { key: 'qr', label: t('qrCode'), icon: 'externalLink' },
         { key: 'edit', label: t('edit'), icon: 'edit' },
+        ...(selectable.value ? [{ key: 'select', label: t('multiSelect'), icon: 'select' as const }] : []),
         { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
       ],
 )
@@ -300,6 +328,13 @@ const menuItems = computed<MenuItem[]>(() =>
 async function onMenuSelect(key: string) {
   menu.value = null
   cardEl.value?.focus()
+  if (key === 'select') {
+    closeChain()
+    selection.start(props.node)
+    await nextTick()
+    document.querySelector<HTMLElement>('.bookmark-card[aria-checked="true"]')?.focus()
+    return
+  }
   await executeBookmarkAction(key, {
     node: props.node,
     isFolder: isDir.value,
@@ -317,20 +352,25 @@ async function onMenuSelect(key: string) {
 <template>
   <div
     ref="cardEl"
-    class="glass bookmark-card group relative flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:ring-2 hover:ring-emerald-400/40 focus-visible:outline-2 focus-visible:outline-emerald-500"
+    class="glass bookmark-card group relative flex cursor-pointer items-center gap-3 rounded-xl px-4 transition-all hover:ring-2 hover:ring-emerald-400/40 focus-visible:outline-2 focus-visible:outline-emerald-500"
     :class="{
       'ring-2 ring-emerald-500/60 opacity-50': dragging,
+      'hover:-translate-y-0.5 hover:shadow-xl': !selection.active,
+      'ring-2 ring-emerald-600 dark:ring-emerald-400': selection.active && selected,
+      'cursor-not-allowed opacity-50': selection.active && !selectable,
     }"
     :data-drop-zone="dropZone"
     :data-popup-chain="rootId"
-    :role="isDir ? 'button' : 'link'"
+    :role="selection.active ? 'checkbox' : isDir ? 'button' : 'link'"
     :aria-label="props.node.title"
-    :aria-expanded="isDir ? intent.isOpen.value : undefined"
+    :aria-expanded="!selection.active && isDir ? intent.isOpen.value : undefined"
+    :aria-checked="selection.active ? selected : undefined"
+    :aria-disabled="selection.active ? !selectable || selection.busy : undefined"
     tabindex="0"
     style="height: var(--lm-card-height, 48px)"
-    draggable="true"
+    :draggable="!selection.active"
     @contextmenu="onContextMenu"
-    @mouseenter="isDir && !bookmarks.draggingId && enterPopup()"
+    @mouseenter="isDir && !selection.active && !bookmarks.draggingId && enterPopup()"
     @mouseleave="isDir && leavePopup()"
     @click="onCardClick"
     @auxclick="onAuxClick"
@@ -342,6 +382,9 @@ async function onMenuSelect(key: string) {
     @dragleave.stop="onDragLeave"
     @drop.stop="onDrop"
   >
+    <span v-if="selection.active" aria-hidden="true" class="flex size-4 shrink-0 items-center justify-center rounded border" :class="selected ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-slate-950' : 'border-slate-500 dark:border-slate-400'">
+      <Icon v-if="selected" name="check" class="size-3" />
+    </span>
     <!-- 文件夹 -->
     <template v-if="isDir">
       <Icon name="folder" class="size-5 shrink-0 text-amber-500 dark:text-amber-400" />
@@ -419,9 +462,12 @@ async function onMenuSelect(key: string) {
     <Teleport to="body">
       <ContextMenu
         v-if="menu"
+        :data-popup-chain="rootId"
         :x="menu.x"
         :y="menu.y"
         :items="menuItems"
+        @mouseenter="parentPopup?.enter()"
+        @mouseleave="parentPopup?.leave()"
         @select="onMenuSelect"
         @close="menu = null"
       />

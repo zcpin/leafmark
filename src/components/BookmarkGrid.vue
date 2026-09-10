@@ -6,16 +6,19 @@ import { t } from '@/lib/i18n'
 import { resolveGridDrop } from '@/lib/drag-utils'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useUiStore } from '@/stores/ui'
+import { useSelectionStore } from '@/stores/selection'
 
 import BookmarkCard from './BookmarkCard.vue'
 
 const bookmarks = useBookmarksStore()
 const ui = useUiStore()
+const selection = useSelectionStore()
 const children = computed(() => bookmarks.currentChildren)
 
 const dropOverGrid = ref(false)
 
 function onGridDragOver(e: DragEvent) {
+  if (selection.active) return
   const sourceId = bookmarks.draggingId || e.dataTransfer?.getData('text/plain')
   if (!sourceId || !bookmarks.currentFolder || !resolveGridDrop(bookmarks.tree, sourceId, bookmarks.currentFolder.id)) return
   e.preventDefault()
@@ -27,6 +30,7 @@ function onGridDragOver(e: DragEvent) {
 async function onGridDrop(e: DragEvent) {
   e.preventDefault()
   dropOverGrid.value = false
+  if (selection.active) return
   const sourceId = e.dataTransfer?.getData('text/plain')
   const parentId = bookmarks.currentFolder?.id
   try {

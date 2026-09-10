@@ -2,9 +2,10 @@
 // 新标签页：紧凑时钟、随内容收拢的书签浮岛、底部年度进度
 // 全屏背景（壁纸/渐变）；书签超量时仅网格内部滚动
 // 顶部工具行：面包屑（当前文件夹路径）/ 主题 / 设置
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import BookmarkGrid from '@/components/BookmarkGrid.vue'
+import BookmarkSelectionToolbar from '@/components/BookmarkSelectionToolbar.vue'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 import Clock from '@/components/Clock.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -12,6 +13,7 @@ import EditBookmarkDialog from '@/components/EditBookmarkDialog.vue'
 import DuplicateDialog from '@/components/DuplicateDialog.vue'
 import Icon, { type IconName } from '@/components/Icon.vue'
 import LinkCheckDialog from '@/components/LinkCheckDialog.vue'
+import MoveBookmarksDialog from '@/components/MoveBookmarksDialog.vue'
 import OnboardingOverlay from '@/components/OnboardingOverlay.vue'
 import QrCodeDialog from '@/components/QrCodeDialog.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
@@ -21,11 +23,13 @@ import { useDeletionsStore } from '@/stores/deletions'
 import YearProgress from '@/components/YearProgress.vue'
 import { useNow } from '@/composables/useNow'
 import { greetingKey } from '@/lib/greeting'
+import { themeGradient } from '@/lib/backgrounds'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSettingsStore } from '@/stores/settings'
 import { useStatsStore } from '@/stores/stats'
 import { useUiStore } from '@/stores/ui'
+import { useSelectionStore } from '@/stores/selection'
 
 const settings = useSettingsStore()
 const bookmarks = useBookmarksStore()
@@ -33,6 +37,25 @@ const stats = useStatsStore()
 const now = useNow()
 const deletions = useDeletionsStore()
 const ui = useUiStore()
+const selection = useSelectionStore()
+const selectionButton = ref<HTMLButtonElement>()
+
+watch(() => selection.active, (active, previous) => {
+  if (previous && !active) void nextTick(() => selectionButton.value?.focus())
+}, { flush: 'post' })
+
+function onSelectionKeydown(event: KeyboardEvent) {
+  if (!selection.active || event.defaultPrevented || selection.moveOpen) return
+  if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], aside')) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    selection.end()
+    selectionButton.value?.focus()
+  } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    selection.selectAll()
+  }
+}
 
 function loadSettings() { void settings.init().catch(() => {}) }
 async function cycleTheme() {
@@ -72,9 +95,11 @@ const greeting = computed(() => t(greetingKey(now.value)))
   <div
     class="lm-bg flex h-screen flex-col overflow-hidden"
     :data-bg="settings.bgKind === 'wallpaper' ? 'wallpaper' : settings.solidBg"
+    :style="settings.bgKind === 'solid' ? { backgroundImage: themeGradient(settings.solidBg, settings.resolvedTheme) } : undefined"
+    @keydown="onSelectionKeydown"
   >
     <!-- 顶部工具行（不盖玻璃） -->
-    <header class="flex shrink-0 items-center gap-2 px-5 py-3 text-slate-500 dark:text-slate-400">
+    <header class="flex shrink-0 items-center gap-2 px-5 py-3 text-slate-600 dark:text-slate-300">
       <div class="flex items-center gap-2">
         <span class="text-lg">🍃</span>
         <span
@@ -87,6 +112,9 @@ const greeting = computed(() => t(greetingKey(now.value)))
       <Breadcrumb class="min-w-0 flex-1" />
       <div class="flex items-center gap-1">
         <UndoDeleteButton />
+        <button ref="selectionButton" type="button" :aria-label="t('multiSelect')" :aria-pressed="selection.active" :aria-disabled="selection.busy || (!selection.active && selection.items.length === 0)" :title="t('multiSelect')" :disabled="selection.busy" class="flex items-center gap-2 rounded-lg p-2 text-xs transition-colors hover:bg-slate-500/10 aria-disabled:opacity-40 dark:hover:bg-white/10" :class="{ 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300': selection.active }" @click="selection.active ? selection.end() : selection.start()">
+          <Icon name="select" /><span class="hidden sm:inline">{{ t('multiSelect') }}</span>
+        </button>
         <button
           type="button"
           class="rounded-lg p-2 transition-colors hover:bg-slate-500/10 dark:hover:bg-white/10"
@@ -116,7 +144,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
       <!-- 时钟 + 问候（常驻，不参与滚动） -->
       <div v-if="settings.display.clock" class="mb-6 flex shrink-0 flex-col items-center sm:mb-8">
         <Clock :now="now" />
-        <p class="mt-2 text-xs tracking-wide text-slate-500 dark:text-slate-400">{{ greeting }}</p>
+        <p class="mt-2 text-xs tracking-wide text-slate-600 dark:text-slate-300">{{ greeting }}</p>
       </div>
 
       <!-- 玻璃卡不再强制填满剩余空间；保留布局宽度设置 -->
@@ -124,6 +152,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
         class="glass bookmark-island flex min-h-0 w-full min-w-[min(100%,20rem)] flex-col rounded-2xl p-4 sm:p-5"
         :style="{ width: `${settings.layout.containerWidth}%`, maxWidth: '100%' }"
       >
+        <BookmarkSelectionToolbar />
         <div class="bookmark-scroll min-h-0 flex-1 overflow-y-auto">
           <div
             v-if="bookmarks.loading && bookmarks.tree.length === 0"
@@ -148,7 +177,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
         </div>
       </div>
 
-      <p v-if="settings.display.stats" class="mt-3 shrink-0 text-center text-xs text-slate-500 dark:text-slate-400">
+      <p v-if="settings.display.stats" class="mt-3 shrink-0 text-center text-xs text-slate-600 dark:text-slate-300">
         {{ t('bookmarksCount', { n: stats.total }) }} · {{ t('openAllHint') }}
       </p>
     </main>
@@ -165,6 +194,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
     <SettingsPanel ref="settingsPanel" />
     <LinkCheckDialog />
     <DuplicateDialog />
+    <MoveBookmarksDialog />
     <ToastStack />
   </div>
 </template>
@@ -180,29 +210,5 @@ const greeting = computed(() => t(greetingKey(now.value)))
 }
 .lm-bg[data-bg='wallpaper'] {
   background-image: var(--lm-bg-image);
-}
-.lm-bg[data-bg='gradient-emerald'] {
-  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 50%, #ecfeff 100%);
-}
-html[data-theme='dark'] .lm-bg[data-bg='gradient-emerald'] {
-  background: linear-gradient(135deg, #064e3b 0%, #022c22 50%, #0f172a 100%);
-}
-.lm-bg[data-bg='gradient-sky'] {
-  background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 50%, #f0f9ff 100%);
-}
-html[data-theme='dark'] .lm-bg[data-bg='gradient-sky'] {
-  background: linear-gradient(135deg, #0c4a6e 0%, #075985 50%, #0f172a 100%);
-}
-.lm-bg[data-bg='gradient-sunset'] {
-  background: linear-gradient(135deg, #fed7aa 0%, #fecaca 50%, #fbcfe8 100%);
-}
-html[data-theme='dark'] .lm-bg[data-bg='gradient-sunset'] {
-  background: linear-gradient(135deg, #7c2d12 0%, #9d174d 50%, #1e1b4b 100%);
-}
-.lm-bg[data-bg='gradient-slate'] {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%);
-}
-html[data-theme='dark'] .lm-bg[data-bg='gradient-slate'] {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%);
 }
 </style>

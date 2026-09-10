@@ -10,6 +10,7 @@ import {
   updateBookmark as apiUpdateBookmark,
 } from '@/lib/chrome-bookmarks'
 import { findNode, getPath, isFolder } from '@/lib/tree-utils'
+import { moveBookmarks as moveBatch, type BookmarkMoveTarget } from '@/lib/bookmark-move'
 import type { BookmarkNode } from '@/lib/types'
 import { useSettingsStore } from './settings'
 
@@ -135,6 +136,11 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     await load()
   }
 
+  async function moveBookmarks(targets: readonly BookmarkMoveTarget[], parentId: string) {
+    try { return await moveBatch(targets, parentId) }
+    finally { await load() }
+  }
+
   /** 收集文件夹下全部书签 URL（B3 批量打开用） */
   function collectFolderUrls(folderId: string): string[] {
     return collectUrls(findNode(tree.value, folderId))
@@ -163,6 +169,7 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
     updateBookmark,
     removeBookmark,
     moveBookmark,
+    moveBookmarks,
     collectFolderUrls,
     dispose,
   }

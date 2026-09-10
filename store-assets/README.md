@@ -4,9 +4,11 @@
 
 本目录集中保存 Chrome Web Store 与 Microsoft Edge Add-ons 的提审素材。截图来自运行中的生产构建，使用公开示例网址和演示书签；推广图仅用于品牌展示。
 
+2026-09-10：发布者确认 **Edge 1.0.0 已通过审核**，正式地址为 <https://microsoftedge.microsoft.com/addons/detail/ncpniokijejakopmbfcjonalbdbggdah>。本目录素材仍对应 1.0.0；仓库中的 1.1.0 为新增多选、批量移动与传统色主题的更新候选版，尚未提交本次更新。Chrome 商店发布状态未确认。
+
 ## 提审准备状态
 
-代码已具备提审候选版的基础：自动化、类型、lint、覆盖率和构建验证通过。此目录提供提交所需的本地素材；实际提交还需完成下文的开发者后台事项。
+以下为 1.0.0 的提审准备记录：自动化、类型、lint、覆盖率和构建验证通过。Edge 发布已完成；下文后台事项保留作 Chrome 提交和后续更新的参考。
 
 - 最低版本为 Chrome/Edge 111，与构建目标及 Tailwind CSS 4 的兼容要求一致。
 - 固定权限为 `bookmarks`、`favicon`、`storage`、`tabGroups`；可选权限为 HTTP/HTTPS 网站访问。
@@ -48,7 +50,7 @@ Chrome 的推广图目前不按语言区分，因此本包使用通用的 Leafma
 - [ ] 使用测试配置文件加载 ZIP，确认新标签页替换提示和首次可选网站权限授权流程。
 - [ ] 填写名称、描述、截图、图标、推广图和审核备注后，提交审核。
 
-公开支持地址可使用 <https://github.com/zcpin/leafmark/issues>。政策文件推送到公开仓库后，可使用其 GitHub 页面地址；也可单独托管 `privacy-policy.html`。本次素材生成不代表已经提交或通过商店审核。
+公开支持地址为 <https://github.com/zcpin/leafmark/issues>。政策文件推送到公开仓库后，可使用其 GitHub 页面地址；也可单独托管 `privacy-policy.html`。Edge 1.0.0 的审核状态见本文开头，素材重新生成本身不代表后续版本已提交。
 
 ## 重新生成
 

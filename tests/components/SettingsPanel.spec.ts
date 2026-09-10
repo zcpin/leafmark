@@ -163,10 +163,9 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
 
   it('点击纯色渐变背景应用并持久化（F5）', async () => {
     const { wrapper, settings } = await openPanel()
-    const skyBtn = document.body.querySelector('[title="Sky"]') as HTMLElement
+    const skyBtn = document.body.querySelector('[title="晴空"]') as HTMLElement
     expect(skyBtn).not.toBeNull()
-    // 色块按钮须携带渐变色板类（main.css 中定义填充），否则用户看不到色块
-    expect(skyBtn.className).toContain('gradient-sky')
+    expect(skyBtn.querySelector('span')?.style.backgroundImage).toContain('linear-gradient')
     skyBtn.click()
     await vi.waitFor(() => {
       expect(settings.bgKind).toBe('solid')

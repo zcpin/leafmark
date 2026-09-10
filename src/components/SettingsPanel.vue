@@ -92,12 +92,7 @@ const presets = [
   { id: 'preset-2', url: wp2, title: 'Aurora' },
   { id: 'preset-3', url: wp3, title: 'Ocean' },
 ]
-const solids = [
-  { cls: 'gradient-emerald', label: 'Emerald' },
-  { cls: 'gradient-sky', label: 'Sky' },
-  { cls: 'gradient-sunset', label: 'Sunset' },
-  { cls: 'gradient-slate', label: 'Slate' },
-]
+import { COLOR_THEMES, themeGradient } from '@/lib/backgrounds'
 
 const fileInput = ref<HTMLInputElement>()
 let uploading = false
@@ -268,16 +263,25 @@ const themeLabel = computed(() =>
               </button>
               <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
 
-              <div class="mt-3 grid grid-cols-4 gap-2">
+              <h4 class="mt-5 text-xs font-semibold text-slate-600 dark:text-slate-300">{{ t('colorThemes') }}</h4>
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{{ t('colorThemesHint') }}</p>
+              <div class="mt-3 grid grid-cols-2 gap-2">
                 <button
-                  v-for="s in solids"
-                  :key="s.cls"
+                  v-for="theme in COLOR_THEMES"
+                  :key="theme.id"
                   type="button"
-                  class="h-12 rounded-lg ring-2 ring-transparent transition-all hover:ring-emerald-400/60"
-                  :class="[s.cls, { 'ring-emerald-500': settings.bgKind === 'solid' && settings.solidBg === s.cls }]"
-                  :title="s.label"
-                  @click="reportSave(settings.setSolidBg(s.cls))"
-                />
+                  class="overflow-hidden rounded-lg border border-slate-400/20 text-left ring-2 ring-transparent transition-colors hover:ring-emerald-400/60 focus-visible:outline-2 focus-visible:outline-emerald-600"
+                  :class="[theme.id, { 'ring-emerald-600 dark:ring-emerald-400': settings.bgKind === 'solid' && settings.solidBg === theme.id }]"
+                  :title="t(theme.label)"
+                  :aria-label="t(theme.label)"
+                  :aria-pressed="settings.bgKind === 'solid' && settings.solidBg === theme.id"
+                  @click="reportSave(settings.setSolidBg(theme.id))"
+                >
+                  <span class="flex h-11 items-center justify-end p-2" :style="{ backgroundImage: themeGradient(theme.id, settings.resolvedTheme) }">
+                    <span v-if="settings.bgKind === 'solid' && settings.solidBg === theme.id" class="rounded-full bg-emerald-700 p-0.5 text-white dark:bg-emerald-400 dark:text-slate-950"><Icon name="check" class="size-3" /></span>
+                  </span>
+                  <span class="block px-2.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200">{{ t(theme.label) }}</span>
+                </button>
               </div>
             </section>
             <section class="space-y-2">

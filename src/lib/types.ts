@@ -6,6 +6,8 @@ export interface BookmarkNode {
   /** 无 url 即文件夹 */
   url?: string
   children?: BookmarkNode[]
+  /** 企业策略管理的书签不可移动。 */
+  unmodifiable?: 'managed'
 }
 
 /** 当前展示文件夹 + 供 Breadcrumb 使用的路径段 */

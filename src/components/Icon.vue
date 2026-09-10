@@ -13,6 +13,9 @@ export type IconName =
   | 'trash'
   | 'home'
   | 'x'
+  | 'select'
+  | 'check'
+  | 'folderMove'
 
 const props = defineProps<{ name: IconName }>()
 
@@ -45,6 +48,9 @@ const paths: Record<IconName, string[]> = {
   trash: ['M3 6h18', 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6'],
   home: ['m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
   x: ['M18 6 6 18', 'm6 6 12 12'],
+  select: ['M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'],
+  check: ['m5 12 4 4L19 6'],
+  folderMove: ['M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z', 'M8 13h8', 'm13 10 3 3-3 3'],
 }
 </script>
 
