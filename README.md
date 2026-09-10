@@ -114,7 +114,18 @@ docs/             功能决定、实现计划和验证记录
 store-assets/     商店文案、截图、推广图和隐私政策
 ```
 
-GitHub Actions 会在 push 和 pull request 时执行锁文件安装、类型检查、lint、覆盖率和构建。覆盖率统计包含 Vue 组件；全量阈值为语句/行/函数 80%、分支 70%，核心逻辑另有较高阈值。
+GitHub Actions 会在 push、pull request 和手动运行时执行锁文件安装、类型检查、lint、覆盖率、构建和 ZIP 打包。覆盖率统计包含 Vue 组件；全量阈值为语句/行/函数 80%、分支 70%，核心逻辑另有较高阈值。
+
+每次成功构建都会在该次 Actions 运行的 **Artifacts** 中提供 `leafmark-v{版本}.zip`，保留 30 天，可直接下载使用；覆盖率报告保留 14 天。ZIP 中的 `manifest.json` 位于根目录，供浏览器加载或商店上传。
+
+推送 `v{版本}` 标签后，全部质量检查通过才会自动创建 **GitHub Release**、生成发布说明并附上同一个 ZIP。标签必须与 `package.json` 和扩展 manifest 的版本一致；重新运行该标签的工作流会更新同名 ZIP。先提交并推送 workflow、代码及版本改动，再创建标签。例如发布当前 1.1.0：
+
+```powershell
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+也可以从 Actions → Quality → Run workflow 手动构建所选分支。GitHub Release 提供安装包下载；Edge 商店更新仍通过商店后台提交。
 
 ## 使用边界
 

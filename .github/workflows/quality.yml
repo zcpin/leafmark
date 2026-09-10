@@ -1,6 +1,9 @@
 name: Quality
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -8,6 +11,11 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      tag: ${{ steps.package.outputs.tag }}
+      archive: ${{ steps.package.outputs.archive }}
+      artifact-id: ${{ steps.extension.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,10 +28,76 @@ jobs:
       - run: pnpm lint
       - run: pnpm coverage
       - run: pnpm build
+      - name: Read package version
+        id: package
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+
+          const { version } = JSON.parse(readFileSync('dist/manifest.json', 'utf8'))
+          const { version: packageVersion } = JSON.parse(readFileSync('package.json', 'utf8'))
+          if (typeof version !== 'string' || !/^\d+(?:\.\d+){0,3}$/.test(version)) {
+            throw new Error('Invalid extension version')
+          }
+          if (version !== packageVersion) {
+            throw new Error('package.json and the built manifest must have the same version')
+          }
+          const tag = `v${version}`
+          if (process.env.GITHUB_REF?.startsWith('refs/tags/v') && process.env.GITHUB_REF_NAME !== tag) {
+            throw new Error(`Release tag must be ${tag}, got ${process.env.GITHUB_REF_NAME}`)
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${tag}\narchive=leafmark-${tag}.zip\n`, 'utf8')
+          NODE
+      - name: Package extension
+        run: pnpm zip
+      - name: Save extension ZIP
+        id: extension
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.package.outputs.archive }}
+          archive: false
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 30
       - name: Save coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: artifacts/coverage
+          overwrite: true
           retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: checks
+    if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Download checked extension ZIP
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.checks.outputs.artifact-id }}
+          path: release-assets
+          skip-decompress: true
+      - name: Publish ZIP
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.checks.outputs.tag }}
+          RELEASE_ARCHIVE: release-assets/${{ needs.checks.outputs.archive }}
+        run: |
+          test -f "$RELEASE_ARCHIVE"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RELEASE_ARCHIVE" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$RELEASE_ARCHIVE" \
+              --verify-tag --title "Leafmark $RELEASE_TAG" --generate-notes
+          fi
