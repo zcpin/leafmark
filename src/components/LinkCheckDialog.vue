@@ -18,7 +18,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
 import Icon from './Icon.vue'
-import UndoDeleteButton from './UndoDeleteButton.vue'
+import RecycleBinButton from './RecycleBinButton.vue'
 
 const checker = useLinkCheckerStore()
 const settings = useSettingsStore()
@@ -441,7 +441,7 @@ async function saveIgnoredDomains() {
             {{ t('linkCheckReviewHint') }}
           </p>
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <UndoDeleteButton :disabled="checker.busy || checker.deleting" />
+            <RecycleBinButton :disabled="checker.busy || checker.deleting" />
             <label class="flex items-center gap-2 text-xs">
               <input
                 type="checkbox"

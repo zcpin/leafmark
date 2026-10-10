@@ -5,7 +5,7 @@ import { openUrl } from '@/lib/tabs'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useDuplicatesStore } from '@/stores/duplicates'
 import Icon from './Icon.vue'
-import UndoDeleteButton from './UndoDeleteButton.vue'
+import RecycleBinButton from './RecycleBinButton.vue'
 
 const duplicates = useDuplicatesStore()
 const bookmarks = useBookmarksStore()
@@ -122,7 +122,7 @@ const { setPanel } = useDialogFocus(
         <footer
           class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-400/15 p-5"
         >
-          <UndoDeleteButton :disabled="duplicates.busy" />
+          <RecycleBinButton :disabled="duplicates.busy" />
           <span class="text-xs text-slate-500 dark:text-slate-400">{{
             t('duplicateKeepOne')
           }}</span>

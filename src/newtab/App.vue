@@ -16,11 +16,12 @@ import LinkCheckDialog from '@/components/LinkCheckDialog.vue'
 import MoveBookmarksDialog from '@/components/MoveBookmarksDialog.vue'
 import OnboardingOverlay from '@/components/OnboardingOverlay.vue'
 import QrCodeDialog from '@/components/QrCodeDialog.vue'
+import RecycleBinButton from '@/components/RecycleBinButton.vue'
+import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
 import SearchBox from '@/components/SearchBox.vue'
 import SearchResults from '@/components/SearchResults.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import ToastStack from '@/components/ToastStack.vue'
-import UndoDeleteButton from '@/components/UndoDeleteButton.vue'
 import { useDeletionsStore } from '@/stores/deletions'
 import YearProgress from '@/components/YearProgress.vue'
 import { useNow } from '@/composables/useNow'
@@ -203,7 +204,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
           <Icon name="search" />
         </button>
         <template v-if="!search.active">
-          <UndoDeleteButton />
+          <RecycleBinButton />
           <button
             ref="selectionButton"
             type="button"
@@ -313,6 +314,7 @@ const greeting = computed(() => t(greetingKey(now.value)))
     <QrCodeDialog />
     <OnboardingOverlay />
     <SettingsPanel ref="settingsPanel" />
+    <RecycleBinDialog />
     <LinkCheckDialog />
     <DuplicateDialog />
     <MoveBookmarksDialog />

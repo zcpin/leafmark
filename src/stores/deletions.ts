@@ -5,13 +5,15 @@ import { createBookmark, getChildren, removeBookmark } from '@/lib/chrome-bookma
 import { onStorageChanged, storageGet, storageSet } from '@/lib/chrome-storage'
 import { withBookmarkLock } from '@/lib/bookmark-lock'
 import {
+  binEntries,
+  countBookmarks,
   deletionEntries,
+  dropEntries,
   parseUndoStack,
   pruneUndoStack,
   UNDO_STACK_VERSION,
   type DeletionResult,
   type DeletionTarget,
-  type UndoEntry,
   type UndoNode,
   type UndoRecord,
 } from '@/lib/bookmark-undo'
@@ -25,8 +27,22 @@ import { useUiStore } from './ui'
 const KEY = 'bookmarkUndo'
 class UndoPersistenceError extends Error {}
 
+/** 回收站里的一条记录：视图直接消费的结构 */
+export interface BinItem {
+  /** 删除前的书签 id，也是回收站条目的定位键 */
+  id: string
+  title: string
+  url?: string
+  isFolder: boolean
+  /** 文件夹内的书签数量；单个书签为 1 */
+  count: number
+  /** 删除时所在目录名 */
+  folder: string
+  deletedAt: number
+}
+
 /**
- * 保存撤销栈（最新在前）。配额不足时丢弃最旧的记录而不是整批放弃；
+ * 保存回收站（最新在前）。配额不足时丢弃最旧的记录而不是整批放弃；
  * 只有「一条都写不进去」才向上抛出，删除流程据此中止。
  * 返回真正落库的记录，调用方据此同步内存栈——回退掉的旧记录不能留在内存里。
  */
@@ -51,13 +67,36 @@ export const useDeletionsStore = defineStore('deletions', () => {
   const bookmarks = useBookmarksStore()
   const settings = useSettingsStore()
   const ui = useUiStore()
-  /** 撤销栈，最新在前；一次撤销只处理栈顶那批 */
+  /** 回收站记录，最新在前；一次删除就是一批 */
   const stack = shallowRef<UndoRecord[]>([])
   const busy = ref(false)
-  const undoCount = computed(() => stack.value[0]?.entries.length ?? 0)
-  const undoDepth = computed(() => stack.value.length)
+  const binOpen = ref(false)
+  /** 展平后的回收站条目，最新在前 */
+  const items = computed<BinItem[]>(() =>
+    binEntries(stack.value).map((entry) => ({
+      id: entry.node.id,
+      title: entry.node.title || entry.node.url || '',
+      ...(entry.node.url !== undefined ? { url: entry.node.url } : {}),
+      isFolder: entry.node.url === undefined,
+      count: countBookmarks(entry.node),
+      folder: folderLabel(entry.parentId, entry.parentTitle),
+      deletedAt: entry.deletedAt,
+    })),
+  )
+  /** 回收站条目总数（跨批次） */
+  const count = computed(() => items.value.length)
+  /** 批次数 */
+  const depth = computed(() => stack.value.length)
   let initPromise: Promise<void> | null = null
   let unsubscribe: (() => void) | null = null
+
+  /** 目录名优先取当前树（重命名后同步），目录已删除则用删除时记录的名字。 */
+  function folderLabel(parentId: string, fallback?: string): string {
+    const node = findNode(bookmarks.tree, parentId)
+    if (node?.title) return node.title
+    if (fallback) return fallback
+    return parentId === '1' ? t('bookmarksBar') : t('otherBookmarks')
+  }
 
   /** 过滤掉已经存在的项；整批都无需恢复的记录直接丢弃，露出更早的那批。 */
   function recoverStack(value: unknown): UndoRecord[] {
@@ -89,6 +128,24 @@ export const useDeletionsStore = defineStore('deletions', () => {
       }
     })()
     return initPromise
+  }
+
+  /** 重新读取本地记录（打开回收站、跨页面变更后使用） */
+  async function refresh(): Promise<void> {
+    await init()
+    if (busy.value) return
+    const saved = await storageGet<unknown>(KEY, null, 'local')
+    await bookmarks.load()
+    if (!bookmarks.error && !busy.value) stack.value = recoverStack(saved)
+  }
+
+  function showBin() {
+    binOpen.value = true
+    void refresh().catch(() => {})
+  }
+
+  function hideBin() {
+    binOpen.value = false
   }
 
   async function remove(
@@ -199,82 +256,134 @@ export const useDeletionsStore = defineStore('deletions', () => {
     }
   }
 
-  async function undo() {
+  /** 恢复回收站里的指定条目（按删除前的节点 id 定位），可跨批次选择。 */
+  async function restore(ids: string[]) {
     await init()
-    if (busy.value || !stack.value.length) return
-    const expectedId = stack.value[0].id
+    const wanted = new Set(ids)
+    if (busy.value || !wanted.size) return
     busy.value = true
     try {
       await withBookmarkLock(async () => {
         const saved = await storageGet<unknown>(KEY, null, 'local')
         await bookmarks.load()
         if (bookmarks.error) throw bookmarks.error
-        if (parseUndoStack(saved)[0]?.id !== expectedId) {
-          stack.value = recoverStack(saved)
-          ui.toast(t('undoRecordChanged'))
-          return
-        }
         const working = recoverStack(saved)
         stack.value = working
-        const top = working[0]
-        if (!top) return
-        const older = working.slice(1)
-        const claimed = new Set(top.restoredIds ?? [])
-        const checkpoint = async () => {
-          top.restoredIds = [...claimed]
-          try {
-            await saveStack([top, ...older])
-          } catch {
-            throw new UndoPersistenceError('Cannot save restore progress')
+        const targets = binEntries(working).filter((entry) => wanted.has(entry.node.id))
+        if (!targets.length) {
+          ui.toast(t('binItemMissing'))
+          return
+        }
+        // 按批次归组：每批各自维护已恢复 id，避免把原有的重复书签合并。
+        const selectedByRecord = new Map<string, Set<string>>()
+        for (const entry of targets) {
+          const selected = selectedByRecord.get(entry.recordId) ?? new Set<string>()
+          selected.add(entry.node.id)
+          selectedByRecord.set(entry.recordId, selected)
+        }
+        const restoredIds: string[] = []
+        let pending = 0
+        for (const record of working) {
+          const selected = selectedByRecord.get(record.id)
+          if (!selected) continue
+          const claimed = new Set(record.restoredIds ?? [])
+          const checkpoint = async () => {
+            record.restoredIds = [...claimed]
+            try {
+              await saveStack(working)
+            } catch {
+              throw new UndoPersistenceError('Cannot save restore progress')
+            }
+          }
+          function collectRestored(node: UndoNode) {
+            if (node.restoredId) claimed.add(node.restoredId)
+            node.children?.forEach(collectRestored)
+          }
+          record.entries.forEach((entry) => collectRestored(entry.node))
+          const entries = [...record.entries]
+            .filter((entry) => selected.has(entry.node.id))
+            .sort((a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index)
+          for (const entry of entries) {
+            if (findNode(bookmarks.tree, entry.node.id)) continue
+            try {
+              const parent = findNode(bookmarks.tree, entry.parentId)
+              await restoreNode(
+                entry.node,
+                parent && isFolder(parent) ? parent.id : '1',
+                entry.index,
+                checkpoint,
+                claimed,
+              )
+              restoredIds.push(entry.node.id)
+            } catch (error) {
+              if (error instanceof UndoPersistenceError) throw error
+              pending++
+            }
           }
         }
-        function collectRestored(node: UndoNode) {
-          if (node.restoredId) claimed.add(node.restoredId)
-          node.children?.forEach(collectRestored)
-        }
-        top.entries.forEach((entry) => collectRestored(entry.node))
-        const pending: UndoEntry[] = []
-        let restored = 0
-        const entries = [...top.entries].sort(
-          (a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index,
-        )
-        for (const entry of entries) {
-          if (findNode(bookmarks.tree, entry.node.id)) continue
-          try {
-            const parent = findNode(bookmarks.tree, entry.parentId)
-            await restoreNode(
-              entry.node,
-              parent && isFolder(parent) ? parent.id : '1',
-              entry.index,
-              checkpoint,
-              claimed,
-            )
-            restored++
-          } catch (error) {
-            if (error instanceof UndoPersistenceError) throw error
-            pending.push(entry)
-          }
-        }
-        // 本批全部恢复则弹出栈顶，露出更早的删除；否则把未完成的项留在栈顶。
-        const nextStack = pending.length
-          ? [{ id: top.id, entries: pending, restoredIds: [...claimed] }, ...older]
-          : older
+        // 已恢复的条目出栈，失败的条目留在回收站里可重试。
+        const nextStack = dropEntries(working, new Set(restoredIds))
         await saveStack(nextStack)
         stack.value = nextStack
         await bookmarks.load()
-        ui.toast(t('undoResult', { n: restored, remaining: pending.length }))
+        ui.toast(t('restoreResult', { n: restoredIds.length, remaining: pending }))
       })
     } catch {
-      ui.toast(t('undoFailed'))
+      ui.toast(t('restoreFailed'))
     } finally {
       busy.value = false
     }
+  }
+
+  /** 从回收站彻底移除；移除后无法再恢复。 */
+  async function discard(ids: string[]) {
+    await init()
+    const wanted = new Set(ids)
+    if (busy.value || !wanted.size) return
+    busy.value = true
+    try {
+      await withBookmarkLock(async () => {
+        const working = recoverStack(await storageGet<unknown>(KEY, null, 'local'))
+        const nextStack = dropEntries(working, wanted)
+        const before = working.reduce((sum, record) => sum + record.entries.length, 0)
+        const after = nextStack.reduce((sum, record) => sum + record.entries.length, 0)
+        await saveStack(nextStack)
+        stack.value = nextStack
+        ui.toast(t('binDiscardResult', { n: before - after }))
+      })
+    } catch {
+      ui.toast(t('restoreFailed'))
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** 清空回收站 */
+  async function clear() {
+    if (!items.value.length) return
+    await discard(items.value.map((item) => item.id))
   }
 
   function dispose() {
     unsubscribe?.()
     unsubscribe = null
     initPromise = null
+    binOpen.value = false
   }
-  return { busy, undoCount, undoDepth, init, remove, undo, dispose }
+  return {
+    busy,
+    binOpen,
+    items,
+    count,
+    depth,
+    init,
+    refresh,
+    showBin,
+    hideBin,
+    remove,
+    restore,
+    discard,
+    clear,
+    dispose,
+  }
 })

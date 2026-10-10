@@ -73,7 +73,7 @@ export const useDuplicatesStore = defineStore('duplicates', () => {
       )
       chosen.value = chosen.value.filter((link) => !result.deleted.includes(link.id))
       ui.toast(
-        t('deleteUndoResult', {
+        t('deleteResult', {
           n: result.deleted.length,
           remaining: result.failed + result.skipped,
         }),

@@ -167,7 +167,7 @@ export const useLinkCheckerStore = defineStore('link-checker', () => {
         t('linkCheckDeleteResult', { n: deleted.size, remaining: selected.length - deleted.size }),
       )
     } catch {
-      ui.toast(t('deleteUndoFailed'))
+      ui.toast(t('deleteFailed'))
     } finally {
       deleting.value = false
     }

@@ -7,6 +7,7 @@ import Icon from '@/components/Icon.vue'
 import { compressWallpaper, readFileAsDataUrl, validateImageFile } from '@/lib/wallpaper'
 import { t } from '@/lib/i18n'
 import { useBookmarksStore } from '@/stores/bookmarks'
+import { useDeletionsStore } from '@/stores/deletions'
 import { useLinkCheckerStore } from '@/stores/link-checker'
 import { useDuplicatesStore } from '@/stores/duplicates'
 import { useSettingsStore, type DisplaySettings } from '@/stores/settings'
@@ -17,6 +18,7 @@ const bookmarks = useBookmarksStore()
 const ui = useUiStore()
 const linkChecker = useLinkCheckerStore()
 const duplicates = useDuplicatesStore()
+const deletions = useDeletionsStore()
 const displayOptions = [
   { key: 'clock', label: 'displayClock' },
   { key: 'yearProgress', label: 'displayYearProgress' },
@@ -78,6 +80,11 @@ function showLinkChecker() {
 function showDuplicates() {
   hide()
   duplicates.show()
+}
+
+function showRecycleBin() {
+  hide()
+  deletions.showBin()
 }
 
 defineExpose({ show, hide })
@@ -409,6 +416,21 @@ const themeLabel = computed(() =>
 
           <!-- 通用 -->
           <div v-show="tab === 'general'" class="space-y-4">
+            <section class="glass rounded-xl px-4 py-3">
+              <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {{ t('recycleBinTitle') }}
+              </h3>
+              <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {{ t('recycleBinHint') }}
+              </p>
+              <button
+                type="button"
+                class="mt-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300"
+                @click="showRecycleBin"
+              >
+                {{ t('recycleBinOpen') }}
+              </button>
+            </section>
             <section class="glass rounded-xl px-4 py-3">
               <h3 class="text-sm font-medium text-slate-700 dark:text-slate-200">
                 {{ t('duplicateTitle') }}

@@ -144,13 +144,13 @@ export async function executeBookmarkAction(
         try {
           const result = await context.deleteBookmarks([{ id: node.id, url: node.url }])
           ui.toast(
-            t('deleteUndoResult', {
+            t('deleteResult', {
               n: result.deleted.length,
               remaining: result.skipped + result.failed,
             }),
           )
         } catch {
-          ui.toast(t('deleteUndoFailed'))
+          ui.toast(t('deleteFailed'))
         }
       }
       return
