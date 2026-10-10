@@ -10,7 +10,7 @@ _A bookmark-focused new tab for Chrome and Edge, with folder previews, bookmark 
 
 **Edge 正式版 1.0.0 已通过审核**：[从 Microsoft Edge 商店安装叶签](https://microsoftedge.microsoft.com/addons/detail/ncpniokijejakopmbfcjonalbdbggdah)。
 
-当前仓库为 **1.1.0 更新候选版**，新增多选、批量移动和六组传统色主题；可通过加载已解压扩展体验。商店素材与发布记录见 [store-assets](./store-assets/README.md)。
+当前仓库为 **1.2.0 更新候选版**，本轮新增书签搜索、方向键网格导航与大目录虚拟滚动，并补齐端到端测试；可通过加载已解压扩展体验。商店素材与发布记录见 [store-assets](./store-assets/README.md)。
 
 ![叶签浅色主页与书签卡片](./store-assets/screenshots/zh_CN/01-home-light.png)
 
@@ -43,7 +43,7 @@ _A bookmark-focused new tab for Chrome and Edge, with folder previews, bookmark 
 3. 点击「加载已解压的扩展程序」，选择仓库中的 **dist/** 目录。
 4. 打开新标签页，按浏览器提示启用 Leafmark 的新标签页。
 
-也可以解压本地生成的 `leafmark-v1.1.0.zip`，再加载解压后的目录。更新构建后，在扩展管理页刷新扩展。
+也可以解压本地生成的 `leafmark-v1.2.0.zip`，再加载解压后的目录。更新构建后，在扩展管理页刷新扩展。
 
 ## 常用操作
 
@@ -128,11 +128,11 @@ GitHub Actions 会在 push、pull request 和手动运行时执行锁文件安�
 
 每次成功构建都会在该次 Actions 运行的 **Artifacts** 中提供 `leafmark-v{版本}.zip`，保留 30 天，可直接下载使用；覆盖率报告保留 14 天。ZIP 中的 `manifest.json` 位于根目录，供浏览器加载或商店上传。
 
-推送 `v{版本}` 标签后，全部质量检查通过才会自动创建 **GitHub Release**、生成发布说明并附上同一个 ZIP。标签必须与 `package.json` 和扩展 manifest 的版本一致；重新运行该标签的工作流会更新同名 ZIP。先提交并推送 workflow、代码及版本改动，再创建标签。例如发布当前 1.1.0：
+推送 `v{版本}` 标签后，全部质量检查通过才会自动创建 **GitHub Release**、生成发布说明并附上同一个 ZIP。标签必须与 `package.json` 和扩展 manifest 的版本一致；重新运行该标签的工作流会更新同名 ZIP。先提交并推送 workflow、代码及版本改动，再创建标签。例如发布当前 1.2.0：
 
 ```powershell
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 也可以从 Actions → Quality → Run workflow 手动构建所选分支。GitHub Release 提供安装包下载；Edge 商店更新仍通过商店后台提交。
