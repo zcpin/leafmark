@@ -90,6 +90,17 @@ export const useDeletionsStore = defineStore('deletions', () => {
   const depth = computed(() => stack.value.length)
   let initPromise: Promise<void> | null = null
   let unsubscribe: (() => void) | null = null
+  /**
+   * 变更版本号。每次落库变更都会递增，用来作废「变更前发起、变更后才落地」
+   * 的 refresh 与跨页面存储回调——否则它们会用旧快照把栈覆盖回去。
+   */
+  let revision = 0
+
+  /** 提交一次已落库的变更 */
+  function commit(next: DeletionRecord[]) {
+    revision += 1
+    stack.value = next
+  }
 
   /** 目录名优先取当前树（重命名后同步），目录已删除则用删除时记录的名字。 */
   function folderLabel(parentId: string, fallback?: string): string {
@@ -119,8 +130,10 @@ export const useDeletionsStore = defineStore('deletions', () => {
         if (!bookmarks.error) stack.value = recoverStack(saved)
         unsubscribe ??= onStorageChanged((key, value) => {
           if (key !== KEY || busy.value) return
+          const token = revision
           void bookmarks.load().then(() => {
-            if (!bookmarks.error && !busy.value) stack.value = recoverStack(value)
+            if (bookmarks.error || busy.value || token !== revision) return
+            stack.value = recoverStack(value)
           })
         }, 'local')
       } catch {
@@ -135,9 +148,12 @@ export const useDeletionsStore = defineStore('deletions', () => {
   async function refresh(): Promise<void> {
     await init()
     if (busy.value) return
+    const token = revision
     const saved = await storageGet<unknown>(KEY, null, 'local')
     await bookmarks.load()
-    if (!bookmarks.error && !busy.value) stack.value = recoverStack(saved)
+    // 期间发生过变更就用变更后的栈，避免旧快照覆盖刚完成的删除/恢复/移除。
+    if (bookmarks.error || busy.value || token !== revision) return
+    stack.value = recoverStack(saved)
   }
 
   function showBin() {
@@ -188,15 +204,17 @@ export const useDeletionsStore = defineStore('deletions', () => {
             result.failed++
           }
         }
-        stack.value = result.deleted.length
-          ? [
-              {
-                id: prepared.id,
-                entries: entries.filter((entry) => result.deleted.includes(entry.node.id)),
-              },
-              ...kept,
-            ]
-          : kept
+        commit(
+          result.deleted.length
+            ? [
+                {
+                  id: prepared.id,
+                  entries: entries.filter((entry) => result.deleted.includes(entry.node.id)),
+                },
+                ...kept,
+              ]
+            : kept,
+        )
         // 即使此处写入失败，预先保存的快照仍可恢复；未删除项通过原 id 过滤。
         await saveStack(stack.value).catch(() => {})
         await bookmarks.load()
@@ -325,7 +343,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
         // 已恢复的条目出栈，失败的条目留在回收站里可重试。
         const nextStack = dropEntries(working, new Set(restoredIds))
         await saveStack(nextStack)
-        stack.value = nextStack
+        commit(nextStack)
         await bookmarks.load()
         ui.toast(t('restoreResult', { n: restoredIds.length, remaining: pending }))
       })
@@ -349,7 +367,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
         const before = working.reduce((sum, record) => sum + record.entries.length, 0)
         const after = nextStack.reduce((sum, record) => sum + record.entries.length, 0)
         await saveStack(nextStack)
-        stack.value = nextStack
+        commit(nextStack)
         ui.toast(t('binDiscardResult', { n: before - after }))
       })
     } catch {

@@ -480,6 +480,19 @@ describe('回收站：按条目查看、恢复与清理', () => {
     deletions.dispose()
   })
 
+  it('refresh 在途时彻底删除，不会被旧快照覆盖回去', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([{ id: '100', url: 'https://github.com' }])
+    // 打开面板会触发后台 refresh；它读到的是删除前的快照。
+    const refreshing = deletions.refresh()
+    await deletions.discard(['100'])
+    await refreshing
+    expect(deletions.items).toHaveLength(0)
+    await deletions.refresh()
+    expect(deletions.items).toHaveLength(0)
+    deletions.dispose()
+  })
+
   it('清空回收站后不保留任何条目', async () => {
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '100', url: 'https://github.com' }])
