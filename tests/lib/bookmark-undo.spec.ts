@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  binEntries,
+  countBookmarks,
   deletionEntries,
+  dropEntries,
   parseUndoStack,
   pruneUndoStack,
+  UNDO_ITEM_LIMIT,
   UNDO_STACK_LIMIT,
   type UndoEntry,
   type UndoRecord,
@@ -97,6 +101,77 @@ describe('pruneUndoStack', () => {
     expect(pruneUndoStack([record('a', []), record('b', [entry('x')])]).map((r) => r.id)).toEqual([
       'b',
     ])
+  })
+
+  it('条目总数超出上限时保留最新的条目', () => {
+    const records = [
+      record('new', [entry('n')]),
+      record(
+        'old',
+        Array.from({ length: UNDO_ITEM_LIMIT }, (_, i) => entry(`o${i}`)),
+      ),
+    ]
+    const stack = pruneUndoStack(records)
+    expect(stack.reduce((sum, item) => sum + item.entries.length, 0)).toBe(UNDO_ITEM_LIMIT)
+    expect(stack[0].id).toBe('new')
+    expect(stack[0].entries).toHaveLength(1)
+  })
+})
+
+describe('binEntries', () => {
+  it('展平为条目，最新在前，并带上所属批次与删除时间', () => {
+    const records = [
+      record('a', [{ ...entry('x'), deletedAt: 2000 }]),
+      record('b', [
+        { ...entry('y'), deletedAt: 1000 },
+        { ...entry('z'), deletedAt: 3000 },
+      ]),
+    ]
+    const items = binEntries(records)
+    expect(items.map((item) => item.node.id)).toEqual(['z', 'x', 'y'])
+    expect(items.map((item) => item.recordId)).toEqual(['b', 'a', 'b'])
+  })
+
+  it('缺少删除时间时回退到批次时间', () => {
+    const items = binEntries([record('1700000000000-1', [entry('x')])])
+    expect(items[0].deletedAt).toBe(1_700_000_000_000)
+  })
+})
+
+describe('dropEntries', () => {
+  it('按节点 id 移除条目，整批清空时丢掉该批', () => {
+    const records = [record('a', [entry('x')]), record('b', [entry('y'), entry('z')])]
+    const kept = dropEntries(records, new Set(['x', 'y']))
+    expect(kept.map((item) => item.id)).toEqual(['b'])
+    expect(kept[0].entries.map((item) => item.node.id)).toEqual(['z'])
+  })
+
+  it('没有命中时原样返回', () => {
+    const records = [record('a', [entry('x')])]
+    expect(dropEntries(records, new Set(['nope']))).toEqual(records)
+  })
+})
+
+describe('countBookmarks', () => {
+  it('统计子树内的书签数量', () => {
+    expect(countBookmarks({ id: '1', title: 'a', url: 'https://a.test' })).toBe(1)
+    expect(
+      countBookmarks({
+        id: '2',
+        title: 'f',
+        children: [
+          { id: '3', title: 'b', url: 'https://b.test' },
+          {
+            id: '4',
+            title: 'g',
+            children: [
+              { id: '5', title: 'c', url: 'https://c.test' },
+              { id: '6', title: 'd', url: 'https://d.test' },
+            ],
+          },
+        ],
+      }),
+    ).toBe(3)
   })
 })
 

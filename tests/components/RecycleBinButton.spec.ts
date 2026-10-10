@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import UndoDeleteButton from '@/components/UndoDeleteButton.vue'
+import RecycleBinButton from '@/components/RecycleBinButton.vue'
 import { t } from '@/lib/i18n'
 import type { UndoRecord } from '@/lib/bookmark-undo'
 import { useDeletionsStore } from '@/stores/deletions'
@@ -21,37 +21,37 @@ function entry(id: string) {
   return { parentId: '10', index: 0, node: { id, title: id, url: `https://${id}.test` } }
 }
 
-/** 组件挂载时自己发起 init，再await一次可拿到同一个 promise（内部有记忆化） */
+/** 组件挂载时自己发起 init，再 await 一次可拿到同一个 promise（内部有记忆化） */
 async function mountButton() {
-  const wrapper = mount(UndoDeleteButton)
+  const wrapper = mount(RecycleBinButton)
   await useDeletionsStore().init()
   await flushPromises()
   return wrapper
 }
 
-describe('UndoDeleteButton', () => {
-  it('没有待撤销记录时不渲染', async () => {
+describe('RecycleBinButton', () => {
+  it('回收站为空时不渲染', async () => {
     const wrapper = await mountButton()
     expect(wrapper.find('button').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('只显示栈顶那一批的数量，并提示还有更早的批次', async () => {
+  it('显示所有批次的条目总数，而不只是最近一批', async () => {
     seed([
       { id: 'a', entries: [entry('901')] },
-      { id: 'b', entries: [entry('902')] },
+      { id: 'b', entries: [entry('902'), entry('903')] },
     ])
     const wrapper = await mountButton()
-    expect(wrapper.find('button').text()).toBe(t('undoDelete', { n: 1 }))
-    expect(wrapper.find('button').attributes('title')).toBe(t('undoMoreHint', { n: 1 }))
-    expect(useDeletionsStore().undoDepth).toBe(2)
+    expect(wrapper.find('button').text()).toBe(t('recycleBin', { n: 3 }))
+    expect(useDeletionsStore().depth).toBe(2)
     wrapper.unmount()
   })
 
-  it('只有一批时不显示更多提示', async () => {
+  it('点击打开回收站面板', async () => {
     seed([{ id: 'a', entries: [entry('901')] }])
     const wrapper = await mountButton()
-    expect(wrapper.find('button').attributes('title')).toBeUndefined()
+    await wrapper.find('button').trigger('click')
+    expect(useDeletionsStore().binOpen).toBe(true)
     wrapper.unmount()
   })
 })

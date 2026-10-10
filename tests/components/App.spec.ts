@@ -33,7 +33,8 @@ describe('App 布局', () => {
           YearProgress: true,
           LinkCheckDialog: true,
           DuplicateDialog: true,
-          UndoDeleteButton: true,
+          RecycleBinButton: true,
+          RecycleBinDialog: true,
         },
       },
     })
@@ -67,7 +68,8 @@ describe('App 布局', () => {
           YearProgress: true,
           LinkCheckDialog: true,
           DuplicateDialog: true,
-          UndoDeleteButton: true,
+          RecycleBinButton: true,
+          RecycleBinDialog: true,
         },
       },
     })
@@ -108,7 +110,8 @@ describe('App 搜索入口', () => {
     YearProgress: true,
     LinkCheckDialog: true,
     DuplicateDialog: true,
-    UndoDeleteButton: true,
+    RecycleBinButton: true,
+    RecycleBinDialog: true,
     SearchBox: true,
     SearchResults: true,
   }

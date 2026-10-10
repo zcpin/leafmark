@@ -67,7 +67,7 @@ describe('重复书签检测', () => {
     expect(chromeMock.bookmarks.remove).not.toHaveBeenCalled()
   })
 
-  it('删除所选副本，并可撤销恢复原目录', async () => {
+  it('删除所选副本，并可从回收站恢复原目录', async () => {
     const store = useDuplicatesStore()
     store.toggle(store.groups[0]!.links[1]!, true)
     vi.spyOn(useUiStore(), 'confirm').mockResolvedValue(true)
@@ -75,7 +75,8 @@ describe('重复书签检测', () => {
     expect(chromeMock.bookmarks.__find('100')).toBeDefined()
     expect(chromeMock.bookmarks.__find('200')).toBeUndefined()
     expect(store.groups).toHaveLength(0)
-    await useDeletionsStore().undo()
+    const deletions = useDeletionsStore()
+    await deletions.restore(deletions.items.map((item) => item.id))
     expect(store.groups[0]?.links).toHaveLength(2)
     expect(chromeMock.bookmarks.__find('2')?.children?.[0]?.title).toBe('B')
     useDeletionsStore().dispose()

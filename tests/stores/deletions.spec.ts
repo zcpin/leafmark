@@ -1,7 +1,7 @@
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { UNDO_STACK_LIMIT } from '@/lib/bookmark-undo'
+import { UNDO_ITEM_LIMIT, UNDO_STACK_LIMIT } from '@/lib/bookmark-undo'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useDeletionsStore } from '@/stores/deletions'
@@ -17,22 +17,27 @@ function urlsInFolder(id: string): (string | undefined)[] {
   return (chromeMock.bookmarks.__find(id)?.children ?? []).map((node) => node.url)
 }
 
-describe('最近一次删除撤销', () => {
-  it('批量删除后按原顺序恢复；撤销第二次不重复创建', async () => {
+/** 回收站里全部条目一起恢复（回收站没有「撤销一批」入口，只有按条恢复） */
+function restoreAll(deletions: ReturnType<typeof useDeletionsStore>) {
+  return deletions.restore(deletions.items.map((item) => item.id))
+}
+
+describe('删除恢复', () => {
+  it('批量删除后按原顺序恢复；再恢复一次不重复创建', async () => {
     const deletions = useDeletionsStore()
     await deletions.remove([
       { id: '101', url: 'https://developer.mozilla.org' },
       { id: '100', url: 'https://github.com' },
     ])
-    expect(deletions.undoCount).toBe(2)
-    await deletions.undo()
+    expect(deletions.count).toBe(2)
+    await restoreAll(deletions)
     expect(chromeMock.bookmarks.__find('10')?.children?.map((node) => node.title)).toEqual([
       'GitHub',
       'MDN',
       '前端',
     ])
-    expect(deletions.undoCount).toBe(0)
-    await deletions.undo()
+    expect(deletions.count).toBe(0)
+    await restoreAll(deletions)
     expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(2)
     deletions.dispose()
   })
@@ -44,8 +49,8 @@ describe('最近一次删除撤销', () => {
     setActivePinia(createPinia())
     const reopened = useDeletionsStore()
     await reopened.init()
-    expect(reopened.undoCount).toBe(1)
-    await reopened.undo()
+    expect(reopened.count).toBe(1)
+    await restoreAll(reopened)
     expect(chromeMock.bookmarks.__find('10')?.children?.[0]?.url).toBe('https://github.com')
     reopened.dispose()
   })
@@ -54,7 +59,7 @@ describe('最近一次删除撤销', () => {
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '100', url: 'https://github.com' }])
     chromeMock.bookmarks.removeTree('10', () => {})
-    await deletions.undo()
+    await restoreAll(deletions)
     expect(
       chromeMock.bookmarks.__find('1')?.children?.some((node) => node.url === 'https://github.com'),
     ).toBe(true)
@@ -67,7 +72,7 @@ describe('最近一次删除撤销', () => {
     await settings.setLinkCheckOptions({ folderId: '102' })
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '10' }])
-    await deletions.undo()
+    await restoreAll(deletions)
     const restored = chromeMock.bookmarks
       .__find('1')
       ?.children?.find((node) => node.title === '开发')
@@ -78,7 +83,7 @@ describe('最近一次删除撤销', () => {
     deletions.dispose()
   })
 
-  it('保存撤销记录失败时禁止删除', async () => {
+  it('保存删除记录失败时禁止删除', async () => {
     const deletions = useDeletionsStore()
     await deletions.init()
     chromeMock.storage.local.set.mockImplementationOnce((_items, callback) => {
@@ -112,9 +117,9 @@ describe('最近一次删除撤销', () => {
       callback({ id: '', title: '' })
       chromeMock.runtime.lastError = null
     })
-    await deletions.undo()
-    expect(deletions.undoCount).toBe(1)
-    await deletions.undo()
+    await restoreAll(deletions)
+    expect(deletions.count).toBe(1)
+    await restoreAll(deletions)
     expect(
       chromeMock.bookmarks.__find('10')?.children?.filter((node) => node.title === 'MDN'),
     ).toHaveLength(1)
@@ -122,14 +127,14 @@ describe('最近一次删除撤销', () => {
     deletions.dispose()
   })
 
-  it('两个新标签页同时撤销，只恢复一份书签', async () => {
+  it('两个新标签页同时恢复，只恢复一份书签', async () => {
     const firstPage = createPinia()
     const first = useDeletionsStore(firstPage)
     await first.remove([{ id: '100', url: 'https://github.com' }])
     const secondPage = createPinia()
     const second = useDeletionsStore(secondPage)
     await second.init()
-    await Promise.all([first.undo(), second.undo()])
+    await Promise.all([restoreAll(first), restoreAll(second)])
     expect(
       chromeMock.bookmarks
         .__find('10')
@@ -158,7 +163,7 @@ describe('最近一次删除撤销', () => {
         chromeMock.runtime.lastError = null
       } else write(items, callback)
     })
-    await first.undo()
+    await restoreAll(first)
     expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(1)
     chromeMock.storage.local.set.mockImplementation(write)
     first.dispose()
@@ -168,14 +173,14 @@ describe('最近一次删除撤销', () => {
     const reopenedPage = createPinia()
     const reopened = useDeletionsStore(reopenedPage)
     await reopened.init()
-    await reopened.undo()
+    await restoreAll(reopened)
     expect(
       chromeMock.bookmarks
         .__find('10')
         ?.children?.filter((node) => node.url === 'https://github.com'),
     ).toHaveLength(1)
     expect(chromeMock.bookmarks.create).toHaveBeenCalledTimes(1)
-    expect(reopened.undoCount).toBe(0)
+    expect(reopened.count).toBe(0)
     reopened.dispose()
     useSettingsStore(reopenedPage).dispose()
     disposePinia(reopenedPage)
@@ -189,9 +194,9 @@ describe('最近一次删除撤销', () => {
       callback()
       chromeMock.runtime.lastError = null
     })
-    await deletions.undo()
+    await restoreAll(deletions)
     expect(chromeMock.bookmarks.create).not.toHaveBeenCalled()
-    expect(deletions.undoCount).toBe(1)
+    expect(deletions.count).toBe(1)
     deletions.dispose()
   })
 
@@ -208,50 +213,50 @@ describe('最近一次删除撤销', () => {
       callback({ id: '', title: '' })
       chromeMock.runtime.lastError = null
     })
-    await first.undo()
-    expect(first.undoCount).toBe(1)
+    await restoreAll(first)
+    expect(first.count).toBe(1)
     first.dispose()
     useSettingsStore(firstPage).dispose()
     disposePinia(firstPage)
     const nextPage = createPinia()
     const next = useDeletionsStore(nextPage)
     await next.init()
-    await next.undo()
+    await restoreAll(next)
     expect(
       chromeMock.bookmarks
         .__find('10')
         ?.children?.filter((node) => node.url === 'https://github.com'),
     ).toHaveLength(2)
-    expect(next.undoCount).toBe(0)
+    expect(next.count).toBe(0)
     next.dispose()
     useSettingsStore(nextPage).dispose()
     disposePinia(nextPage)
   })
 
-  it('撤销栈跨页面保留多批删除，按后进先出逐批恢复', async () => {
+  it('回收站保留多批删除，可按条目分别恢复', async () => {
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '100', url: 'https://github.com' }])
     await deletions.remove([{ id: '101', url: 'https://developer.mozilla.org' }])
-    expect(deletions.undoDepth).toBe(2)
-    expect(deletions.undoCount).toBe(1)
+    expect(deletions.depth).toBe(2)
+    expect(deletions.count).toBe(2)
 
-    await deletions.undo()
+    await deletions.restore(['101'])
     expect(urlsInFolder('10')).toContain('https://developer.mozilla.org')
     expect(urlsInFolder('10')).not.toContain('https://github.com')
-    expect(deletions.undoDepth).toBe(1)
+    expect(deletions.depth).toBe(1)
 
-    await deletions.undo()
+    await deletions.restore(['100'])
     expect(urlsInFolder('10')).toEqual([
       'https://github.com',
       'https://developer.mozilla.org',
       undefined,
     ])
-    expect(deletions.undoDepth).toBe(0)
-    expect(deletions.undoCount).toBe(0)
+    expect(deletions.depth).toBe(0)
+    expect(deletions.count).toBe(0)
     deletions.dispose()
   })
 
-  it('记录在新页面中同样可逐批恢复', async () => {
+  it('记录在新页面中同样可按条目恢复', async () => {
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '100', url: 'https://github.com' }])
     await deletions.remove([{ id: '101', url: 'https://developer.mozilla.org' }])
@@ -259,9 +264,9 @@ describe('最近一次删除撤销', () => {
     setActivePinia(createPinia())
     const reopened = useDeletionsStore()
     await reopened.init()
-    expect(reopened.undoDepth).toBe(2)
-    await reopened.undo()
-    await reopened.undo()
+    expect(reopened.depth).toBe(2)
+    await reopened.restore(['100'])
+    await reopened.restore(['101'])
     expect(urlsInFolder('10')).toContain('https://github.com')
     expect(urlsInFolder('10')).toContain('https://developer.mozilla.org')
     reopened.dispose()
@@ -293,8 +298,8 @@ describe('最近一次删除撤销', () => {
     for (let i = 0; i < total; i++) {
       await deletions.remove([{ id: `b${i}`, url: `https://b${i}.test` }])
     }
-    expect(deletions.undoDepth).toBe(UNDO_STACK_LIMIT)
-    for (let i = 0; i < UNDO_STACK_LIMIT; i++) await deletions.undo()
+    expect(deletions.depth).toBe(UNDO_STACK_LIMIT)
+    await restoreAll(deletions)
     const urls = urlsInFolder('10')
     expect(urls).toHaveLength(UNDO_STACK_LIMIT)
     expect(urls).not.toContain('https://b0.test')
@@ -304,7 +309,7 @@ describe('最近一次删除撤销', () => {
     deletions.dispose()
   })
 
-  it('本批部分失败时保留剩余项，更早的批次仍在栈中', async () => {
+  it('部分条目恢复失败时，其余条目照常恢复，失败的留在回收站重试', async () => {
     const deletions = useDeletionsStore()
     await deletions.remove([{ id: '100', url: 'https://github.com' }])
     await deletions.remove([
@@ -316,19 +321,22 @@ describe('最近一次删除撤销', () => {
       callback({ id: '', title: '' })
       chromeMock.runtime.lastError = null
     })
-    await deletions.undo()
-    expect(deletions.undoDepth).toBe(2)
-    expect(deletions.undoCount).toBe(1)
-    await deletions.undo()
-    expect(deletions.undoDepth).toBe(1)
-    await deletions.undo()
-    expect(urlsInFolder('1')).toContain('https://example.com')
+    await restoreAll(deletions)
+    // 书签栏下那条创建失败；另外两条已恢复，失败项仍占着一批
     expect(urlsInFolder('10')).toContain('https://github.com')
-    expect(deletions.undoDepth).toBe(0)
+    expect(urlsInFolder('10')).toContain('https://developer.mozilla.org')
+    expect(urlsInFolder('1')).not.toContain('https://example.com')
+    expect(deletions.depth).toBe(1)
+    expect(deletions.count).toBe(1)
+
+    await restoreAll(deletions)
+    expect(urlsInFolder('1')).toContain('https://example.com')
+    expect(deletions.depth).toBe(0)
+    expect(deletions.count).toBe(0)
     deletions.dispose()
   })
 
-  it('1.x 的单条记录可迁移并按新版栈撤销', async () => {
+  it('1.x 的单条记录可迁移后可恢复', async () => {
     chromeMock.__storage.local.set('bookmarkUndo', {
       id: 'legacy',
       entries: [
@@ -337,8 +345,8 @@ describe('最近一次删除撤销', () => {
     })
     const deletions = useDeletionsStore()
     await deletions.init()
-    expect(deletions.undoDepth).toBe(1)
-    await deletions.undo()
+    expect(deletions.depth).toBe(1)
+    await restoreAll(deletions)
     expect(urlsInFolder('10')).toContain('https://old.test')
     deletions.dispose()
   })
@@ -359,9 +367,9 @@ describe('最近一次删除撤销', () => {
     })
     const deletions = useDeletionsStore()
     await deletions.init()
-    expect(deletions.undoDepth).toBe(2)
-    await deletions.undo()
-    await deletions.undo()
+    expect(deletions.depth).toBe(2)
+    await restoreAll(deletions)
+    await restoreAll(deletions)
     expect(urlsInFolder('10')).toContain('https://new.test')
     expect(urlsInFolder('10')).toContain('https://older.test')
     deletions.dispose()
@@ -387,9 +395,9 @@ describe('最近一次删除撤销', () => {
     await deletions.remove([{ id: '11', url: 'https://example.com' }])
     chromeMock.storage.local.set.mockImplementation(write)
     expect(dropped).toBe(true)
-    expect(deletions.undoDepth).toBe(2)
-    await deletions.undo()
-    await deletions.undo()
+    expect(deletions.depth).toBe(2)
+    await restoreAll(deletions)
+    await restoreAll(deletions)
     expect(urlsInFolder('1')).toContain('https://example.com')
     expect(urlsInFolder('10')).toContain('https://developer.mozilla.org')
     expect(urlsInFolder('10')).not.toContain('https://github.com')
@@ -404,11 +412,11 @@ describe('最近一次删除撤销', () => {
     const second = useDeletionsStore(secondPage)
     await second.init()
     await Promise.all([
-      first.undo(),
+      restoreAll(first),
       second.remove([{ id: '101', url: 'https://developer.mozilla.org' }]),
     ])
     expect(chromeMock.bookmarks.__find('101')).toBeUndefined()
-    await second.undo()
+    await restoreAll(second)
     expect(
       chromeMock.bookmarks
         .__find('10')
@@ -420,5 +428,100 @@ describe('最近一次删除撤销', () => {
     useSettingsStore(secondPage).dispose()
     disposePinia(firstPage)
     disposePinia(secondPage)
+  })
+})
+
+describe('回收站：按条目查看、恢复与清理', () => {
+  it('条目带来源目录、删除时间与文件夹内书签数', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([{ id: '102' }])
+    const item = deletions.items[0]
+    expect(item.isFolder).toBe(true)
+    expect(item.count).toBe(1)
+    expect(item.folder).toBe('开发')
+    expect(item.deletedAt).toBeGreaterThan(0)
+    deletions.dispose()
+  })
+
+  it('可以跨批次只恢复选中的那一条', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([{ id: '100', url: 'https://github.com' }])
+    await deletions.remove([{ id: '101', url: 'https://developer.mozilla.org' }])
+    await deletions.restore(['100'])
+    expect(urlsInFolder('10')).toContain('https://github.com')
+    expect(urlsInFolder('10')).not.toContain('https://developer.mozilla.org')
+    expect(deletions.items.map((item) => item.id)).toEqual(['101'])
+    deletions.dispose()
+  })
+
+  it('一批里只恢复部分条目时，其余条目仍在回收站', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([
+      { id: '100', url: 'https://github.com' },
+      { id: '101', url: 'https://developer.mozilla.org' },
+    ])
+    await deletions.restore(['101'])
+    expect(urlsInFolder('10')).toContain('https://developer.mozilla.org')
+    expect(urlsInFolder('10')).not.toContain('https://github.com')
+    expect(deletions.items.map((item) => item.id)).toEqual(['100'])
+    deletions.dispose()
+  })
+
+  it('彻底删除后该条不再出现在回收站，也无法恢复', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([
+      { id: '100', url: 'https://github.com' },
+      { id: '101', url: 'https://developer.mozilla.org' },
+    ])
+    await deletions.discard(['100'])
+    expect(deletions.items.map((item) => item.id)).toEqual(['101'])
+    await deletions.restore(['100'])
+    expect(urlsInFolder('10')).not.toContain('https://github.com')
+    deletions.dispose()
+  })
+
+  it('清空回收站后不保留任何条目', async () => {
+    const deletions = useDeletionsStore()
+    await deletions.remove([{ id: '100', url: 'https://github.com' }])
+    await deletions.remove([{ id: '101', url: 'https://developer.mozilla.org' }])
+    expect(deletions.count).toBe(2)
+    await deletions.clear()
+    expect(deletions.count).toBe(0)
+    expect(deletions.items).toEqual([])
+    deletions.dispose()
+  })
+
+  it('条目数超出上限时只保留最新的若干条', async () => {
+    const total = UNDO_ITEM_LIMIT + 5
+    chromeMock.__storage.local.set('bookmarkUndo', {
+      version: 2,
+      records: [
+        {
+          id: 'new',
+          entries: [
+            {
+              parentId: '10',
+              index: 0,
+              node: { id: 'newest', title: 'Newest', url: 'https://newest.test' },
+              deletedAt: 1_000_000,
+            },
+          ],
+        },
+        {
+          id: 'old',
+          entries: Array.from({ length: total - 1 }, (_, i) => ({
+            parentId: '10',
+            index: 0,
+            node: { id: `o${i}`, title: `O${i}`, url: `https://o${i}.test` },
+            deletedAt: 1000 + i,
+          })),
+        },
+      ],
+    })
+    const deletions = useDeletionsStore()
+    await deletions.init()
+    expect(deletions.items).toHaveLength(UNDO_ITEM_LIMIT)
+    expect(deletions.items[0].id).toBe('newest')
+    deletions.dispose()
   })
 })

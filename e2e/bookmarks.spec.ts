@@ -24,7 +24,7 @@ test.describe('书签新标签页', () => {
     await expect(card(page, 'Beta')).toBeVisible()
   })
 
-  test('删除书签后从顶栏撤销，书签回到原来的位置', async ({ newtab: page }) => {
+  test('删除书签后从回收站恢复，书签回到原来的位置', async ({ newtab: page }) => {
     await seed(page, { title: 'Alpha', url: 'https://alpha.test' })
     await seed(page, { title: 'Beta', url: 'https://beta.test' })
     await page.reload()
@@ -35,12 +35,18 @@ test.describe('书签新标签页', () => {
     await expect(card(page, 'Alpha')).toHaveCount(0)
     await expect.poll(() => urlsOf(page, '1')).toEqual(['https://beta.test'])
 
-    await page.getByRole('button', { name: /^Undo deletion/ }).click()
+    await page.getByRole('button', { name: /^Recycle bin/ }).click()
+    const bin = page.getByRole('dialog')
+    await bin
+      .locator('li')
+      .filter({ hasText: 'Alpha' })
+      .getByRole('button', { name: 'Restore' })
+      .click()
     await expect(card(page, 'Alpha')).toBeVisible()
     await expect.poll(() => urlsOf(page, '1')).toEqual(['https://alpha.test', 'https://beta.test'])
   })
 
-  test('连续两批删除后，撤销按钮逐批回退', async ({ newtab: page }) => {
+  test('连续两批删除后，可在回收站里选择恢复其中一条', async ({ newtab: page }) => {
     await seed(page, { title: 'Alpha', url: 'https://alpha.test' })
     await seed(page, { title: 'Beta', url: 'https://beta.test' })
     await page.reload()
@@ -52,14 +58,26 @@ test.describe('书签新标签页', () => {
     }
     await expect.poll(() => childrenOf(page, '1')).toEqual([])
 
-    const undo = page.getByRole('button', { name: /^Undo deletion/ })
-    await undo.click()
+    await page.getByRole('button', { name: /^Recycle bin/ }).click()
+    const bin = page.getByRole('dialog')
+    await expect(bin.locator('li')).toHaveCount(2)
+
+    await bin
+      .locator('li')
+      .filter({ hasText: 'Beta' })
+      .getByRole('button', { name: 'Restore' })
+      .click()
     await expect(card(page, 'Beta')).toBeVisible()
     await expect(card(page, 'Alpha')).toHaveCount(0)
+    await expect(bin.locator('li')).toHaveCount(1)
 
-    await undo.click()
+    await bin
+      .locator('li')
+      .filter({ hasText: 'Alpha' })
+      .getByRole('button', { name: 'Restore' })
+      .click()
     await expect(card(page, 'Alpha')).toBeVisible()
-    await expect(undo).toHaveCount(0)
+    await expect(bin.locator('li')).toHaveCount(0)
   })
 
   test('多选后批量移动到目标文件夹', async ({ newtab: page }) => {
