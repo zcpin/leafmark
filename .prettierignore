@@ -1,0 +1,16 @@
+# 构建产物与历史报告
+artifacts/
+coverage/
+dist/
+node_modules/
+leafmark-v*.zip
+*.local
+
+# 锁文件由 pnpm 生成
+pnpm-lock.yaml
+
+# 上架素材：宣传页与隐私政策是手工排版的 HTML，不参与格式化
+store-assets/
+
+# 会话记忆目录
+.workbuddy/

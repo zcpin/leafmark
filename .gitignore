@@ -1,7 +1,10 @@
 dist/
+coverage/
 node_modules/
 .idea/
 *.local
 .DS_Store
 leafmark-v*.zip
 artifacts/
+playwright-report/
+.workbuddy/
