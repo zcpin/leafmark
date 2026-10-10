@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import RecycleBinButton from '@/components/RecycleBinButton.vue'
 import { t } from '@/lib/i18n'
-import type { UndoRecord } from '@/lib/bookmark-undo'
+import type { DeletionRecord } from '@/lib/deletion-bin'
 import { useDeletionsStore } from '@/stores/deletions'
 import { chromeMock } from '../mocks/chrome'
 
@@ -13,7 +13,7 @@ beforeEach(() => {
   chromeMock.__reset()
 })
 
-function seed(records: UndoRecord[]) {
+function seed(records: DeletionRecord[]) {
   chromeMock.__storage.local.set('bookmarkUndo', { version: 2, records })
 }
 

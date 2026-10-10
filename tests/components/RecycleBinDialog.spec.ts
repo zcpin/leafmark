@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import RecycleBinDialog from '@/components/RecycleBinDialog.vue'
 import { t } from '@/lib/i18n'
-import type { UndoEntry, UndoRecord } from '@/lib/bookmark-undo'
+import type { DeletedEntry, DeletionRecord } from '@/lib/deletion-bin'
 import { useDeletionsStore } from '@/stores/deletions'
 import { useUiStore } from '@/stores/ui'
 import { chromeMock } from '../mocks/chrome'
@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 /** 回收站里的条目：url 为空表示文件夹 */
-function entry(id: string, title: string, url: string, deletedAt: number): UndoEntry {
+function entry(id: string, title: string, url: string, deletedAt: number): DeletedEntry {
   return {
     parentId: '10',
     index: 0,
@@ -32,7 +32,7 @@ function entry(id: string, title: string, url: string, deletedAt: number): UndoE
   }
 }
 
-function folder(id: string, title: string, deletedAt: number): UndoEntry {
+function folder(id: string, title: string, deletedAt: number): DeletedEntry {
   return {
     parentId: '10',
     index: 0,
@@ -42,7 +42,7 @@ function folder(id: string, title: string, deletedAt: number): UndoEntry {
   }
 }
 
-function seed(records: UndoRecord[]) {
+function seed(records: DeletionRecord[]) {
   chromeMock.__storage.local.set('bookmarkUndo', { version: 2, records })
 }
 

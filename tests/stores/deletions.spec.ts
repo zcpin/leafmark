@@ -1,7 +1,7 @@
 import { createPinia, disposePinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { UNDO_ITEM_LIMIT, UNDO_STACK_LIMIT } from '@/lib/bookmark-undo'
+import { BIN_ITEM_LIMIT, BIN_BATCH_LIMIT } from '@/lib/deletion-bin'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useDeletionsStore } from '@/stores/deletions'
@@ -273,7 +273,7 @@ describe('删除恢复', () => {
   })
 
   it('超过上限时丢弃最旧的记录', async () => {
-    const total = UNDO_STACK_LIMIT + 2
+    const total = BIN_BATCH_LIMIT + 2
     const children: BookmarkNode[] = Array.from({ length: total }, (_, i) => ({
       id: `b${i}`,
       title: `B${i}`,
@@ -298,10 +298,10 @@ describe('删除恢复', () => {
     for (let i = 0; i < total; i++) {
       await deletions.remove([{ id: `b${i}`, url: `https://b${i}.test` }])
     }
-    expect(deletions.depth).toBe(UNDO_STACK_LIMIT)
+    expect(deletions.depth).toBe(BIN_BATCH_LIMIT)
     await restoreAll(deletions)
     const urls = urlsInFolder('10')
-    expect(urls).toHaveLength(UNDO_STACK_LIMIT)
+    expect(urls).toHaveLength(BIN_BATCH_LIMIT)
     expect(urls).not.toContain('https://b0.test')
     expect(urls).not.toContain('https://b1.test')
     expect(urls).toContain('https://b2.test')
@@ -492,7 +492,7 @@ describe('回收站：按条目查看、恢复与清理', () => {
   })
 
   it('条目数超出上限时只保留最新的若干条', async () => {
-    const total = UNDO_ITEM_LIMIT + 5
+    const total = BIN_ITEM_LIMIT + 5
     chromeMock.__storage.local.set('bookmarkUndo', {
       version: 2,
       records: [
@@ -520,7 +520,7 @@ describe('回收站：按条目查看、恢复与清理', () => {
     })
     const deletions = useDeletionsStore()
     await deletions.init()
-    expect(deletions.items).toHaveLength(UNDO_ITEM_LIMIT)
+    expect(deletions.items).toHaveLength(BIN_ITEM_LIMIT)
     expect(deletions.items[0].id).toBe('newest')
     deletions.dispose()
   })

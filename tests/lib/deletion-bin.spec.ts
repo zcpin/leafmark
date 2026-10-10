@@ -5,20 +5,20 @@ import {
   countBookmarks,
   deletionEntries,
   dropEntries,
-  parseUndoStack,
-  pruneUndoStack,
-  UNDO_ITEM_LIMIT,
-  UNDO_STACK_LIMIT,
-  type UndoEntry,
-  type UndoRecord,
-} from '@/lib/bookmark-undo'
+  parseDeletionStack,
+  pruneDeletionStack,
+  BIN_ITEM_LIMIT,
+  BIN_BATCH_LIMIT,
+  type DeletedEntry,
+  type DeletionRecord,
+} from '@/lib/deletion-bin'
 import type { BookmarkNode } from '@/lib/types'
 
-function entry(id: string, parentId = '10', index = 0): UndoEntry {
+function entry(id: string, parentId = '10', index = 0): DeletedEntry {
   return { parentId, index, node: { id, title: id, url: `https://${id}.test` } }
 }
 
-function record(id: string, entries: UndoEntry[]): UndoRecord {
+function record(id: string, entries: DeletedEntry[]): DeletionRecord {
   return { id, entries }
 }
 
@@ -49,17 +49,17 @@ function tree(): BookmarkNode[] {
   ]
 }
 
-describe('parseUndoStack', () => {
+describe('parseDeletionStack', () => {
   it('空值与非法值都得到空栈', () => {
-    expect(parseUndoStack(null)).toEqual([])
-    expect(parseUndoStack(undefined)).toEqual([])
-    expect(parseUndoStack('broken')).toEqual([])
-    expect(parseUndoStack({})).toEqual([])
-    expect(parseUndoStack({ records: 'nope' })).toEqual([])
+    expect(parseDeletionStack(null)).toEqual([])
+    expect(parseDeletionStack(undefined)).toEqual([])
+    expect(parseDeletionStack('broken')).toEqual([])
+    expect(parseDeletionStack({})).toEqual([])
+    expect(parseDeletionStack({ records: 'nope' })).toEqual([])
   })
 
   it('读取新版栈并丢弃残缺记录', () => {
-    const stack = parseUndoStack({
+    const stack = parseDeletionStack({
       version: 2,
       records: [record('a', [entry('x')]), { id: 'b' }, record('c', [entry('y')])],
     })
@@ -67,7 +67,7 @@ describe('parseUndoStack', () => {
   })
 
   it('1.x 单条记录迁移为一条', () => {
-    const stack = parseUndoStack(record('legacy', [entry('x')]))
+    const stack = parseDeletionStack(record('legacy', [entry('x')]))
     expect(stack).toHaveLength(1)
     expect(stack[0].id).toBe('legacy')
   })
@@ -80,27 +80,27 @@ describe('parseUndoStack', () => {
       previous: [entry('y', '11', 1)],
       previousRestoredIds: ['r0'],
     }
-    const stack = parseUndoStack(legacy)
+    const stack = parseDeletionStack(legacy)
     expect(stack.map((item) => item.id)).toEqual(['legacy', 'legacy:previous'])
     expect(stack[1].restoredIds).toEqual(['r0'])
     expect(stack[1].entries[0].parentId).toBe('11')
   })
 
   it('超出上限时截断', () => {
-    const records = Array.from({ length: UNDO_STACK_LIMIT + 3 }, (_, i) =>
+    const records = Array.from({ length: BIN_BATCH_LIMIT + 3 }, (_, i) =>
       record(`r${i}`, [entry(`n${i}`)]),
     )
-    const stack = parseUndoStack({ version: 2, records })
-    expect(stack).toHaveLength(UNDO_STACK_LIMIT)
+    const stack = parseDeletionStack({ version: 2, records })
+    expect(stack).toHaveLength(BIN_BATCH_LIMIT)
     expect(stack[0].id).toBe('r0')
   })
 })
 
-describe('pruneUndoStack', () => {
+describe('pruneDeletionStack', () => {
   it('丢弃空记录', () => {
-    expect(pruneUndoStack([record('a', []), record('b', [entry('x')])]).map((r) => r.id)).toEqual([
-      'b',
-    ])
+    expect(
+      pruneDeletionStack([record('a', []), record('b', [entry('x')])]).map((r) => r.id),
+    ).toEqual(['b'])
   })
 
   it('条目总数超出上限时保留最新的条目', () => {
@@ -108,11 +108,11 @@ describe('pruneUndoStack', () => {
       record('new', [entry('n')]),
       record(
         'old',
-        Array.from({ length: UNDO_ITEM_LIMIT }, (_, i) => entry(`o${i}`)),
+        Array.from({ length: BIN_ITEM_LIMIT }, (_, i) => entry(`o${i}`)),
       ),
     ]
-    const stack = pruneUndoStack(records)
-    expect(stack.reduce((sum, item) => sum + item.entries.length, 0)).toBe(UNDO_ITEM_LIMIT)
+    const stack = pruneDeletionStack(records)
+    expect(stack.reduce((sum, item) => sum + item.entries.length, 0)).toBe(BIN_ITEM_LIMIT)
     expect(stack[0].id).toBe('new')
     expect(stack[0].entries).toHaveLength(1)
   })

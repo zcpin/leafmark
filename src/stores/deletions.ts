@@ -9,14 +9,14 @@ import {
   countBookmarks,
   deletionEntries,
   dropEntries,
-  parseUndoStack,
-  pruneUndoStack,
-  UNDO_STACK_VERSION,
+  parseDeletionStack,
+  pruneDeletionStack,
+  DELETION_STACK_VERSION,
   type DeletionResult,
   type DeletionTarget,
-  type UndoNode,
-  type UndoRecord,
-} from '@/lib/bookmark-undo'
+  type DeletedNode,
+  type DeletionRecord,
+} from '@/lib/deletion-bin'
 import { findNode, isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { t } from '@/lib/i18n'
@@ -24,8 +24,9 @@ import { useBookmarksStore } from './bookmarks'
 import { useSettingsStore } from './settings'
 import { useUiStore } from './ui'
 
+/** 沿用 1.x 的存储键，改名会丢掉用户已保存的回收站记录 */
 const KEY = 'bookmarkUndo'
-class UndoPersistenceError extends Error {}
+class BinPersistenceError extends Error {}
 
 /** 回收站里的一条记录：视图直接消费的结构 */
 export interface BinItem {
@@ -46,13 +47,13 @@ export interface BinItem {
  * 只有「一条都写不进去」才向上抛出，删除流程据此中止。
  * 返回真正落库的记录，调用方据此同步内存栈——回退掉的旧记录不能留在内存里。
  */
-async function saveStack(records: readonly UndoRecord[]): Promise<UndoRecord[]> {
-  let next = pruneUndoStack(records)
+async function saveStack(records: readonly DeletionRecord[]): Promise<DeletionRecord[]> {
+  let next = pruneDeletionStack(records)
   for (;;) {
     try {
       await storageSet(
         KEY,
-        next.length ? { version: UNDO_STACK_VERSION, records: next } : null,
+        next.length ? { version: DELETION_STACK_VERSION, records: next } : null,
         'local',
       )
       return next
@@ -68,7 +69,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
   const settings = useSettingsStore()
   const ui = useUiStore()
   /** 回收站记录，最新在前；一次删除就是一批 */
-  const stack = shallowRef<UndoRecord[]>([])
+  const stack = shallowRef<DeletionRecord[]>([])
   const busy = ref(false)
   const binOpen = ref(false)
   /** 展平后的回收站条目，最新在前 */
@@ -99,9 +100,9 @@ export const useDeletionsStore = defineStore('deletions', () => {
   }
 
   /** 过滤掉已经存在的项；整批都无需恢复的记录直接丢弃，露出更早的那批。 */
-  function recoverStack(value: unknown): UndoRecord[] {
-    const records: UndoRecord[] = []
-    for (const record of parseUndoStack(value)) {
+  function recoverStack(value: unknown): DeletionRecord[] {
+    const records: DeletionRecord[] = []
+    for (const record of parseDeletionStack(value)) {
       const entries = record.entries.filter((entry) => !findNode(bookmarks.tree, entry.node.id))
       if (entries.length) records.push({ ...record, entries })
     }
@@ -171,7 +172,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
           failed: 0,
         }
         if (!entries.length) return result
-        const prepared: UndoRecord = {
+        const prepared: DeletionRecord = {
           id: `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`,
           entries,
         }
@@ -207,7 +208,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
   }
 
   async function restoreNode(
-    node: UndoNode,
+    node: DeletedNode,
     parentId: string,
     index: number,
     checkpoint: () => Promise<void>,
@@ -292,10 +293,10 @@ export const useDeletionsStore = defineStore('deletions', () => {
             try {
               await saveStack(working)
             } catch {
-              throw new UndoPersistenceError('Cannot save restore progress')
+              throw new BinPersistenceError('Cannot save restore progress')
             }
           }
-          function collectRestored(node: UndoNode) {
+          function collectRestored(node: DeletedNode) {
             if (node.restoredId) claimed.add(node.restoredId)
             node.children?.forEach(collectRestored)
           }
@@ -316,7 +317,7 @@ export const useDeletionsStore = defineStore('deletions', () => {
               )
               restoredIds.push(entry.node.id)
             } catch (error) {
-              if (error instanceof UndoPersistenceError) throw error
+              if (error instanceof BinPersistenceError) throw error
               pending++
             }
           }

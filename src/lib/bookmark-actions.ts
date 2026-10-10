@@ -2,7 +2,7 @@
 import { t } from './i18n'
 import { MAX_BATCH_OPEN } from './tabs'
 import type { BookmarkNode } from './types'
-import type { DeletionResult, DeletionTarget } from './bookmark-undo'
+import type { DeletionResult, DeletionTarget } from './deletion-bin'
 
 /** 超过该数量时「全部打开」先向用户确认，避免误触发大量标签页。 */
 export const BATCH_OPEN_CONFIRM_THRESHOLD = 15
