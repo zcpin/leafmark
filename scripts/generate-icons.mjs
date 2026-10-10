@@ -11,7 +11,7 @@ const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'ic
 // ---------- PNG 编码 ----------
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n
-  for (let k = 0; k < 8; k++) c = c & 1 ? (0xedb88320 ^ (c >>> 1)) : c >>> 1
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
   return c >>> 0
 })
 

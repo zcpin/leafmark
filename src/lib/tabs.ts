@@ -21,11 +21,18 @@ export function openUrl(url: string, inNewTab: boolean, active = true): void {
 }
 
 /**
+ * 一次批量打开的标签页上限。
+ * 大目录无节制地创建标签页会拖垮浏览器且难以撤销，因此超过上限时只打开前 N 个；
+ * 调用方（右键「全部打开」）负责在打开前向用户确认。
+ */
+export const MAX_BATCH_OPEN = 50
+
+/**
  * 批量打开一组 URL 并放入同色标签组（B3）
  * 仅单个 URL 时不分组；非扩展环境逐个 window.open
  */
 export async function openAllInGroup(urls: string[], groupTitle?: string): Promise<void> {
-  const valid = urls.filter((u) => !!u)
+  const valid = urls.filter((u) => !!u).slice(0, MAX_BATCH_OPEN)
   if (valid.length === 0) return
 
   if (!isExtensionEnv()) {

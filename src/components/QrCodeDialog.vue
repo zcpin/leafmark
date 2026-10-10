@@ -10,7 +10,10 @@ import { useDialogFocus } from '@/composables/useDialogFocus'
 import Icon from './Icon.vue'
 
 const ui = useUiStore()
-const { setPanel, titleId } = useDialogFocus(() => ui.qrVisible, () => ui.resolveQr())
+const { setPanel, titleId } = useDialogFocus(
+  () => ui.qrVisible,
+  () => ui.resolveQr(),
+)
 
 const dataUrl = ref('')
 const loading = ref(false)
@@ -27,7 +30,10 @@ async function render() {
   }
 }
 
-watch(() => ui.qrVisible, () => void render())
+watch(
+  () => ui.qrVisible,
+  () => void render(),
+)
 onMounted(() => void render())
 
 async function copyUrl() {
@@ -52,24 +58,32 @@ function download() {
       class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4"
       @click.self="ui.resolveQr()"
     >
-      <div :ref="setPanel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1" class="glass-strong w-full max-w-xs rounded-2xl p-6 text-center outline-none">
+      <div
+        :ref="setPanel"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
+        class="glass-strong w-full max-w-xs rounded-2xl p-6 text-center outline-none"
+      >
         <header class="mb-4 flex items-center justify-between gap-3">
-          <h2 :id="titleId" class="text-sm font-semibold text-slate-700 dark:text-slate-200">{{ t('qrCode') }}</h2>
-          <button type="button" :aria-label="t('close')" class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-500/10" @click="ui.resolveQr()"><Icon name="x" /></button>
+          <h2 :id="titleId" class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            {{ t('qrCode') }}
+          </h2>
+          <button
+            type="button"
+            :aria-label="t('close')"
+            class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-500/10"
+            @click="ui.resolveQr()"
+          >
+            <Icon name="x" />
+          </button>
         </header>
         <div class="relative mx-auto flex size-60 items-center justify-center">
-          <div
-            v-if="loading"
-            class="text-sm text-slate-400"
-          >
+          <div v-if="loading" class="text-sm text-slate-400">
             {{ t('loading') }}
           </div>
-          <img
-            v-else
-            :src="dataUrl"
-            :alt="ui.qrTitle"
-            class="size-60 rounded-xl bg-white p-2"
-          />
+          <img v-else :src="dataUrl" :alt="ui.qrTitle" class="size-60 rounded-xl bg-white p-2" />
         </div>
 
         <p class="mt-4 break-all text-xs text-slate-500 dark:text-slate-400">{{ ui.qrUrl }}</p>

@@ -9,17 +9,25 @@ import { useUiStore } from '@/stores/ui'
 import { useSettingsStore } from '@/stores/settings'
 import { chromeMock } from '../mocks/chrome'
 
-vi.mock('@/lib/link-check-permissions', () => ({ requestLinkCheckAccess: vi.fn(), supportsLinkCheck: vi.fn() }))
-vi.mock('@/lib/link-checker', async (original) => ({ ...await original<typeof import('@/lib/link-checker')>(), scanLinks: vi.fn() }))
+vi.mock('@/lib/link-check-permissions', () => ({
+  requestLinkCheckAccess: vi.fn(),
+  supportsLinkCheck: vi.fn(),
+}))
+vi.mock('@/lib/link-checker', async (original) => ({
+  ...(await original<typeof import('@/lib/link-checker')>()),
+  scanLinks: vi.fn(),
+}))
 
 beforeEach(async () => {
   setActivePinia(createPinia())
   chromeMock.__reset()
   vi.mocked(supportsLinkCheck).mockReturnValue(true)
   vi.mocked(requestLinkCheckAccess).mockReset().mockResolvedValue(true)
-  vi.mocked(scanLinks).mockReset().mockImplementation(async (targets, _timeout, _signal, onResults) => {
-    onResults(targets.map((target) => ({ ...target, status: 'http-error', httpStatus: 404 })))
-  })
+  vi.mocked(scanLinks)
+    .mockReset()
+    .mockImplementation(async (targets, _timeout, _signal, onResults) => {
+      onResults(targets.map((target) => ({ ...target, status: 'http-error', httpStatus: 404 })))
+    })
   await useBookmarksStore().load()
   await useSettingsStore().init()
 })
@@ -33,16 +41,26 @@ describe('链接检测任务', () => {
   })
 
   it('只扫描所选目录中未被忽略的地址', async () => {
-    await useSettingsStore().setLinkCheckOptions({ folderId: '10', ignoredDomains: ['github.com', 'mozilla.org'] })
+    await useSettingsStore().setLinkCheckOptions({
+      folderId: '10',
+      ignoredDomains: ['github.com', 'mozilla.org'],
+    })
     const checker = useLinkCheckerStore()
     expect(checker.ignoredCount).toBe(2)
     await checker.start()
-    expect(vi.mocked(scanLinks).mock.calls[0]?.[0].map((target) => target.url)).toEqual(['https://vuejs.org'])
+    expect(vi.mocked(scanLinks).mock.calls[0]?.[0].map((target) => target.url)).toEqual([
+      'https://vuejs.org',
+    ])
   })
 
   it('修改范围会使等待中的授权失效，避免继续扫描旧范围', async () => {
     let grant: ((allowed: boolean) => void) | undefined
-    vi.mocked(requestLinkCheckAccess).mockImplementation(() => new Promise((resolve) => { grant = resolve }))
+    vi.mocked(requestLinkCheckAccess).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          grant = resolve
+        }),
+    )
     const checker = useLinkCheckerStore()
     const pending = checker.start()
     await useSettingsStore().setLinkCheckOptions({ folderId: '102' })
@@ -63,7 +81,12 @@ describe('链接检测任务', () => {
 
   it('授权期间关闭面板，迟到的授权结果不会启动扫描', async () => {
     let grant: ((allowed: boolean) => void) | undefined
-    vi.mocked(requestLinkCheckAccess).mockImplementation(() => new Promise((resolve) => { grant = resolve }))
+    vi.mocked(requestLinkCheckAccess).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          grant = resolve
+        }),
+    )
     const checker = useLinkCheckerStore()
     checker.show()
     const pending = checker.start()

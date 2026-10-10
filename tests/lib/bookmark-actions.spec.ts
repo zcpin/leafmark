@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { executeBookmarkAction, type BookmarkActionContext } from '@/lib/bookmark-actions'
+import {
+  BATCH_OPEN_CONFIRM_THRESHOLD,
+  executeBookmarkAction,
+  type BookmarkActionContext,
+  type BookmarkActionKey,
+} from '@/lib/bookmark-actions'
+import { MAX_BATCH_OPEN } from '@/lib/tabs'
 import type { BookmarkNode } from '@/lib/types'
 
 function makeContext(
@@ -48,6 +54,56 @@ describe('bookmark-actions', () => {
     expect(context.openAllInGroup).toHaveBeenCalledWith(['https://a.test'], 'Dev')
   })
 
+  it('超过阈值时先确认再打开，取消则不创建标签页', async () => {
+    const urls = Array.from(
+      { length: BATCH_OPEN_CONFIRM_THRESHOLD + 5 },
+      (_, i) => `https://a.test/${i}`,
+    )
+    const context = makeContext({ id: '10', title: 'Dev' }, true)
+    context.bookmarks.collectFolderUrls.mockReturnValue(urls)
+    context.ui.confirm.mockResolvedValueOnce(false)
+
+    await executeBookmarkAction('openAll', context)
+
+    expect(context.ui.confirm).toHaveBeenCalledOnce()
+    expect(context.ui.confirm.mock.calls[0]![0]).toMatchObject({
+      title: '打开全部书签',
+      confirmText: '全部打开',
+      tone: 'primary',
+    })
+    expect(context.ui.confirm.mock.calls[0]![0].message).toContain(String(urls.length))
+    expect(context.openAllInGroup).not.toHaveBeenCalled()
+
+    context.ui.confirm.mockResolvedValueOnce(true)
+    await executeBookmarkAction('openAll', context)
+    expect(context.openAllInGroup).toHaveBeenCalledWith(urls, 'Dev')
+  })
+
+  it('目录超过一次打开上限时提示上限，确认后仍交给标签页 port 截断', async () => {
+    const urls = Array.from({ length: MAX_BATCH_OPEN + 10 }, (_, i) => `https://a.test/${i}`)
+    const context = makeContext({ id: '10', title: 'Dev' }, true)
+    context.bookmarks.collectFolderUrls.mockReturnValue(urls)
+    context.ui.confirm.mockResolvedValueOnce(true)
+
+    await executeBookmarkAction('openAll', context)
+
+    const options = context.ui.confirm.mock.calls[0]![0]
+    expect(options.title).toBe('标签页数量超出上限')
+    expect(options.message).toContain(String(urls.length))
+    expect(options.message).toContain(String(MAX_BATCH_OPEN))
+    expect(context.openAllInGroup).toHaveBeenCalledWith(urls, 'Dev')
+  })
+
+  it('空文件夹不确认也不打开', async () => {
+    const context = makeContext({ id: '10', title: 'Dev' }, true)
+    context.bookmarks.collectFolderUrls.mockReturnValue([])
+
+    await executeBookmarkAction('openAll', context)
+
+    expect(context.ui.confirm).not.toHaveBeenCalled()
+    expect(context.openAllInGroup).not.toHaveBeenCalled()
+  })
+
   it('书签复制失败时只显示失败提示', async () => {
     const context = makeContext({ id: '100', title: 'GitHub', url: 'https://github.com' })
     context.clipboard.writeText.mockRejectedValueOnce(new Error('denied'))
@@ -86,16 +142,35 @@ describe('bookmark-actions', () => {
     expect(context.ui.toast).toHaveBeenCalledWith('已恢复默认主页')
   })
 
-  it.each(['home', 'resetHome'])('主页操作 %s 保存失败时提示错误，不显示成功或切换目录', async (action) => {
-    const context = makeContext({ id: '10', title: 'Dev' }, true)
-    const save = action === 'home'
-      ? context.settings.setHomeFolderId
-      : context.bookmarks.resetHomeFolder
-    vi.mocked(save).mockRejectedValueOnce(new Error('storage unavailable'))
+  it('未知命令不产生任何副作用（运行时兜底，类型层面已收紧）', async () => {
+    const context = makeContext({ id: '10', title: 'Dev', url: 'https://a.test' })
+    const spies = [
+      context.openUrl,
+      context.openAllInGroup,
+      context.bookmarks.updateBookmark,
+      context.deleteBookmarks,
+      context.ui.toast,
+    ]
 
-    await executeBookmarkAction(action, context)
+    await executeBookmarkAction('bogus' as BookmarkActionKey, context)
 
-    expect(context.bookmarks.setViewFolder).not.toHaveBeenCalled()
-    expect(context.ui.toast).toHaveBeenCalledExactlyOnceWith('主页设置保存失败，已保留原设置，请重试。')
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
+
+  it.each(['home', 'resetHome'] as const)(
+    '主页操作 %s 保存失败时提示错误，不显示成功或切换目录',
+    async (action) => {
+      const context = makeContext({ id: '10', title: 'Dev' }, true)
+      const save =
+        action === 'home' ? context.settings.setHomeFolderId : context.bookmarks.resetHomeFolder
+      vi.mocked(save).mockRejectedValueOnce(new Error('storage unavailable'))
+
+      await executeBookmarkAction(action, context)
+
+      expect(context.bookmarks.setViewFolder).not.toHaveBeenCalled()
+      expect(context.ui.toast).toHaveBeenCalledExactlyOnceWith(
+        '主页设置保存失败，已保留原设置，请重试。',
+      )
+    },
+  )
 })

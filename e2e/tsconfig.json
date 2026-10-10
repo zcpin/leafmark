@@ -1,0 +1,9 @@
+{
+  // e2e 运行在 Node 侧（启动浏览器）且要在页面里调用 chrome.bookmarks，
+  // 因此单独开一份配置：把全局类型换成 chrome + node，主 tsconfig 保持纯浏览器环境。
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["chrome", "node"]
+  },
+  "include": ["./**/*.ts", "../playwright.config.ts"]
+}

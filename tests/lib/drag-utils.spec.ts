@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { cardDropZone, computeDropIndex, dropIntoFolder, isSamePosition, resolveCardDrop, resolveGridDrop } from '@/lib/drag-utils'
+import {
+  cardDropZone,
+  computeDropIndex,
+  dropIntoFolder,
+  isSamePosition,
+  resolveCardDrop,
+  resolveGridDrop,
+} from '@/lib/drag-utils'
 import { SAMPLE_TREE } from '../mocks/chrome'
 import type { BookmarkNode } from '@/lib/types'
 
@@ -16,13 +23,22 @@ describe('drag-utils', () => {
   })
 
   it('移动前索引用于 Chrome API，不会双重扣除源位置', () => {
-    expect(resolveCardDrop(SAMPLE_TREE, '100', '101', 'after')).toEqual({ parentId: '10', index: 2 })
-    expect(resolveCardDrop(SAMPLE_TREE, '101', '100', 'before')).toEqual({ parentId: '10', index: 0 })
+    expect(resolveCardDrop(SAMPLE_TREE, '100', '101', 'after')).toEqual({
+      parentId: '10',
+      index: 2,
+    })
+    expect(resolveCardDrop(SAMPLE_TREE, '101', '100', 'before')).toEqual({
+      parentId: '10',
+      index: 0,
+    })
     expect(resolveCardDrop(SAMPLE_TREE, '100', '101', 'before')).toBeNull()
   })
 
   it('级联面板落点使用目标实际父目录', () => {
-    expect(resolveCardDrop(SAMPLE_TREE, '11', '101', 'before')).toEqual({ parentId: '10', index: 1 })
+    expect(resolveCardDrop(SAMPLE_TREE, '11', '101', 'before')).toEqual({
+      parentId: '10',
+      index: 1,
+    })
   })
 
   it('禁止移入自身后代，网格空白区移动到末尾', () => {

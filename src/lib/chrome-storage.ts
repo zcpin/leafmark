@@ -15,15 +15,24 @@ export async function storageGet<T>(
 }
 
 /** 同一区域的设置一次读取，避免逐键往返浏览器进程。 */
-export async function storageGetMany<T extends Record<string, unknown>>(defaults: T, area: StorageAreaName = 'sync'): Promise<T> {
+export async function storageGetMany<T extends Record<string, unknown>>(
+  defaults: T,
+  area: StorageAreaName = 'sync',
+): Promise<T> {
   if (!isExtensionEnv()) {
-    return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => {
-      const raw = localStorage.getItem(key)
-      return [key, raw === null ? fallback : JSON.parse(raw) ?? fallback]
-    })) as T
+    return Object.fromEntries(
+      Object.entries(defaults).map(([key, fallback]) => {
+        const raw = localStorage.getItem(key)
+        return [key, raw === null ? fallback : (JSON.parse(raw) ?? fallback)]
+      }),
+    ) as T
   }
-  const items = await callChrome<Record<string, unknown>>((cb) => chrome.storage[area].get(defaults, cb))
-  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, items[key] ?? fallback])) as T
+  const items = await callChrome<Record<string, unknown>>((cb) =>
+    chrome.storage[area].get(defaults, cb),
+  )
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [key, items[key] ?? fallback]),
+  ) as T
 }
 
 export async function storageSet(
@@ -34,9 +43,13 @@ export async function storageSet(
   return storageSetMany({ [key]: value }, area)
 }
 
-export async function storageSetMany(values: Record<string, unknown>, area: StorageAreaName = 'sync'): Promise<void> {
+export async function storageSetMany(
+  values: Record<string, unknown>,
+  area: StorageAreaName = 'sync',
+): Promise<void> {
   if (!isExtensionEnv()) {
-    for (const [key, value] of Object.entries(values)) localStorage.setItem(key, JSON.stringify(value))
+    for (const [key, value] of Object.entries(values))
+      localStorage.setItem(key, JSON.stringify(value))
     return
   }
   return callChrome<void>((cb) => chrome.storage[area].set(values, cb))

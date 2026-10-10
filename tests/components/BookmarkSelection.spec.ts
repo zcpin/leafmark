@@ -9,21 +9,39 @@ import { useBookmarksStore } from '@/stores/bookmarks'
 import { useSelectionStore } from '@/stores/selection'
 import { chromeMock } from '../mocks/chrome'
 
-const tree: BookmarkNode[] = [{ id: '0', title: '', children: [
-  { id: '1', parentId: '0', title: '书签栏', children: [
-    { id: 'a', parentId: '1', title: 'Alpha', url: 'https://a.test' },
-    { id: 'b', parentId: '1', title: 'Beta', url: 'https://b.test' },
-    { id: 'f', parentId: '1', title: 'Folder', children: [
-      { id: 'c', parentId: 'f', title: 'Child', url: 'https://c.test' },
-      { id: 'nested', parentId: 'f', title: 'Nested', children: [] },
-    ] },
-  ] },
-  { id: '2', parentId: '0', title: '其他书签', children: [] },
-] }]
+const tree: BookmarkNode[] = [
+  {
+    id: '0',
+    title: '',
+    children: [
+      {
+        id: '1',
+        parentId: '0',
+        title: '书签栏',
+        children: [
+          { id: 'a', parentId: '1', title: 'Alpha', url: 'https://a.test' },
+          { id: 'b', parentId: '1', title: 'Beta', url: 'https://b.test' },
+          {
+            id: 'f',
+            parentId: '1',
+            title: 'Folder',
+            children: [
+              { id: 'c', parentId: 'f', title: 'Child', url: 'https://c.test' },
+              { id: 'nested', parentId: 'f', title: 'Nested', children: [] },
+            ],
+          },
+        ],
+      },
+      { id: '2', parentId: '0', title: '其他书签', children: [] },
+    ],
+  },
+]
 
 let wrapper: VueWrapper
 const button = (label: string, root: ParentNode = document.body) => {
-  const found = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((item) => item.textContent?.trim() === label)
+  const found = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(
+    (item) => item.textContent?.trim() === label,
+  )
   expect(found, `button: ${label}`).toBeDefined()
   return found!
 }
@@ -38,10 +56,20 @@ const chooseOther = async () => {
 beforeEach(async () => {
   setActivePinia(createPinia())
   chromeMock.bookmarks.__setTree(tree)
-  wrapper = mount(App, { attachTo: document.body, global: { stubs: {
-    Clock: true, YearProgress: true, OnboardingOverlay: true, SettingsPanel: true,
-    LinkCheckDialog: true, DuplicateDialog: true, QrCodeDialog: true,
-  } } })
+  wrapper = mount(App, {
+    attachTo: document.body,
+    global: {
+      stubs: {
+        Clock: true,
+        YearProgress: true,
+        OnboardingOverlay: true,
+        SettingsPanel: true,
+        LinkCheckDialog: true,
+        DuplicateDialog: true,
+        QrCodeDialog: true,
+      },
+    },
+  })
   await vi.waitFor(() => expect(wrapper.findAll('.bookmark-card')).toHaveLength(3))
 })
 
@@ -92,7 +120,9 @@ describe('多选与批量移动交互', () => {
     button('移动到…').click()
     await nextTick()
     for (const path of ['书签栏', '书签栏 / Folder', '书签栏 / Folder / Nested']) {
-      expect(dialog().querySelector<HTMLInputElement>(`input[aria-label="${path}"]`)?.disabled).toBe(true)
+      expect(
+        dialog().querySelector<HTMLInputElement>(`input[aria-label="${path}"]`)?.disabled,
+      ).toBe(true)
     }
     expect(button('移动 2 项到此处').disabled).toBe(true)
     await chooseOther()
@@ -118,7 +148,9 @@ describe('多选与批量移动交互', () => {
       chromeMock.runtime.lastError = null
     })
     button('移动 2 项到此处').click()
-    await vi.waitFor(() => expect(dialog().querySelector('[role="alert"]')?.textContent).toContain('另有 1 项移动失败'))
+    await vi.waitFor(() =>
+      expect(dialog().querySelector('[role="alert"]')?.textContent).toContain('另有 1 项移动失败'),
+    )
     expect(card('Alpha').attributes('aria-checked')).toBe('true')
     expect(wrapper.find('.bookmark-card[aria-label="Beta"]').exists()).toBe(false)
     button('移动 1 项到此处').click()
@@ -191,7 +223,9 @@ describe('多选与批量移动交互', () => {
     await nextTick()
     await chooseOther()
     chromeMock.bookmarks.removeTree('2', () => {})
-    await vi.waitFor(() => expect(dialog().querySelector('input[aria-label="其他书签"]')).toBeNull())
+    await vi.waitFor(() =>
+      expect(dialog().querySelector('input[aria-label="其他书签"]')).toBeNull(),
+    )
     expect(button('移动 1 项到此处').disabled).toBe(true)
     expect(chromeMock.bookmarks.move).not.toHaveBeenCalled()
   })
@@ -202,7 +236,9 @@ describe('多选与批量移动交互', () => {
     const child = document.querySelector<HTMLElement>('.bookmark-card[aria-label="Child"]')!
     child.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
     await nextTick()
-    const select = Array.from(document.querySelectorAll<HTMLButtonElement>('.glass-strong button')).find((item) => item.textContent?.trim() === '多选')!
+    const select = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('.glass-strong button'),
+    ).find((item) => item.textContent?.trim() === '多选')!
     expect(select).toBeDefined()
     select.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
     await nextTick()

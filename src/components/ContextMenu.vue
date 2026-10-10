@@ -1,18 +1,19 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="K extends string = string">
 // 通用右键菜单：毛玻璃浮层、视口边缘翻转、Esc/点击外部关闭
+// 菜单项 key 由使用方通过泛型收紧，select 事件回传同一字面量联合类型
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import Icon, { type IconName } from './Icon.vue'
 
-export interface MenuItem {
-  key: string
+export interface MenuItem<K extends string = string> {
+  key: K
   label: string
   icon?: IconName
   danger?: boolean
 }
 
-const props = defineProps<{ x: number; y: number; items: MenuItem[] }>()
-const emit = defineEmits<{ select: [key: string]; close: [] }>()
+const props = defineProps<{ x: number; y: number; items: MenuItem<K>[] }>()
+const emit = defineEmits<{ select: [key: K]; close: [] }>()
 
 const root = ref<HTMLElement>()
 const pos = ref({ left: `${props.x}px`, top: `${props.y}px` })
@@ -52,6 +53,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
+    role="menu"
     class="glass-strong fixed z-50 min-w-44 rounded-xl p-1.5 text-sm"
     :style="pos"
     @contextmenu.prevent
@@ -61,6 +63,7 @@ onBeforeUnmount(() => {
       v-for="item in props.items"
       :key="item.key"
       type="button"
+      role="menuitem"
       class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors"
       :class="
         item.danger

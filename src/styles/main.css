@@ -103,8 +103,12 @@ body {
   background: #10b981;
   pointer-events: none;
 }
-.bookmark-card[data-drop-zone='before']::before { left: 0; }
-.bookmark-card[data-drop-zone='after']::after { right: 0; }
+.bookmark-card[data-drop-zone='before']::before {
+  left: 0;
+}
+.bookmark-card[data-drop-zone='after']::after {
+  right: 0;
+}
 .bookmark-card[data-drop-zone='inside'] {
   outline: 2px solid #10b981;
   outline-offset: -2px;

@@ -5,7 +5,13 @@ import { defineStore } from 'pinia'
 
 import { onStorageChanged, storageGetMany, storageSet, storageSetMany } from '@/lib/chrome-storage'
 import { DEFAULT_LINK_TIMEOUT, normalizeLinkTimeout } from '@/lib/link-checker'
-import { normalizeIgnoredDomain, normalizeLinkCheckOptions, type LinkCheckOptions } from '@/lib/link-check-options'
+import {
+  normalizeIgnoredDomain,
+  normalizeLinkCheckOptions,
+  type LinkCheckOptions,
+} from '@/lib/link-check-options'
+import { createAppearanceWriter } from '@/lib/appearance-writer'
+import { createWriteQueue } from '@/lib/write-queue'
 
 export type ThemeMode = 'light' | 'dark' | 'auto'
 type ResolvedTheme = Exclude<ThemeMode, 'auto'>
@@ -28,10 +34,14 @@ export interface LayoutPreset {
   containerWidth: number
 }
 
-export interface DisplaySettings { clock: boolean; yearProgress: boolean; stats: boolean }
+export interface DisplaySettings {
+  clock: boolean
+  yearProgress: boolean
+  stats: boolean
+}
 
 function normalizeDisplay(value: unknown): DisplaySettings {
-  const source = value && typeof value === 'object' ? value as Partial<DisplaySettings> : {}
+  const source = value && typeof value === 'object' ? (value as Partial<DisplaySettings>) : {}
   return {
     clock: typeof source.clock === 'boolean' ? source.clock : true,
     yearProgress: typeof source.yearProgress === 'boolean' ? source.yearProgress : true,
@@ -55,18 +65,17 @@ function normalizeTransparency(value: unknown): number {
 }
 
 function normalizeLayout(value: unknown): LayoutSettings {
-  const input = value && typeof value === 'object' ? value as Partial<LayoutSettings> : {}
+  const input = value && typeof value === 'object' ? (value as Partial<LayoutSettings>) : {}
   const clamp = (value: unknown, fallback: number, min: number, max: number) =>
-    typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback
   return {
     cardWidth: clamp(input.cardWidth, DEFAULT_LAYOUT.cardWidth, 140, 280),
     cardHeight: clamp(input.cardHeight, DEFAULT_LAYOUT.cardHeight, 40, 80),
     containerWidth: clamp(input.containerWidth, DEFAULT_LAYOUT.containerWidth, 60, 100),
   }
 }
-
-type Appearance = { layout: LayoutSettings; glassTransparency: number }
-type AppearanceKey = keyof Appearance
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeMode>('auto')
@@ -102,72 +111,36 @@ export const useSettingsStore = defineStore('settings', () => {
   let stopSyncStorage: (() => void) | null = null
   let stopLocalStorage: (() => void) | null = null
   let mediaQuery: MediaQueryList | null = null
-  let writeTail: Promise<unknown> | null = null
   let backgroundWriting = false
-  let savedAppearance: Appearance = { layout: { ...DEFAULT_LAYOUT }, glassTransparency: DEFAULT_GLASS_TRANSPARENCY }
-  let appearanceChanges: Partial<Appearance> = {}
-  const appearanceVersions = { layout: 0, glassTransparency: 0 }
-  const dirtyAppearance = new Set<AppearanceKey>()
-  let appearanceTimer: ReturnType<typeof setTimeout> | undefined
-  let appearancePending: { promise: Promise<void>; resolve: () => void; reject: (error: unknown) => void } | null = null
 
-  function queueWrite<T>(action: () => Promise<T>): Promise<T> {
-    const pending = writeTail ? writeTail.then(action, action) : action()
-    writeTail = pending
-    const finished = () => { if (writeTail === pending) writeTail = null }
-    void pending.then(finished, finished)
-    return pending
+  // 所有 storage 写入共用一条串行队列，避免后发先至
+  const queueWrite = createWriteQueue()
+
+  /**
+   * 外观设置（布局 / 毛玻璃透明度）走防抖合并写入：滑块拖动时本地值立即生效，
+   * 停止 250ms 或离开页面时才落库，落库后回写权威值（期间又改过则保留新预览）。
+   * 状态机见 lib/appearance-writer.ts。
+   */
+  const appearance = createAppearanceWriter<{
+    layout: LayoutSettings
+    glassTransparency: number
+  }>({
+    initial: { layout: { ...DEFAULT_LAYOUT }, glassTransparency: DEFAULT_GLASS_TRANSPARENCY },
+    queue: queueWrite,
+    save: (changes) => storageSetMany(changes),
+    apply: {
+      layout: (value) => {
+        layout.value = { ...value }
+      },
+      glassTransparency: (value) => {
+        glassTransparency.value = value
+      },
+    },
+  })
+
+  function onPageHide() {
+    void appearance.flush().catch(() => {})
   }
-
-  function applyAppearance(key: AppearanceKey) {
-    if (key === 'layout') layout.value = { ...savedAppearance.layout }
-    else glassTransparency.value = savedAppearance.glassTransparency
-  }
-
-  function flushAppearance(): Promise<void> {
-    clearTimeout(appearanceTimer)
-    appearanceTimer = undefined
-    const deferred = appearancePending
-    if (!deferred) return writeTail?.then(() => {}) ?? Promise.resolve()
-    const changes = appearanceChanges
-    const versions = { ...appearanceVersions }
-    appearanceChanges = {}
-    appearancePending = null
-    const keys = Object.keys(changes) as AppearanceKey[]
-    const save = queueWrite(async () => {
-      try {
-        await storageSetMany(changes)
-        savedAppearance = { ...savedAppearance, ...changes }
-      } finally {
-        // 旧请求完成时不能覆盖用户已输入的新预览。
-        for (const key of keys) {
-          if (versions[key] !== appearanceVersions[key]) continue
-          dirtyAppearance.delete(key)
-          applyAppearance(key)
-        }
-      }
-    })
-    void save.then(deferred.resolve, deferred.reject)
-    return deferred.promise
-  }
-
-  function scheduleAppearance(key: AppearanceKey): Promise<void> {
-    dirtyAppearance.add(key)
-    appearanceVersions[key]++
-    if (key === 'layout') appearanceChanges.layout = { ...layout.value }
-    else appearanceChanges.glassTransparency = glassTransparency.value
-    if (!appearancePending) {
-      let resolve!: () => void
-      let reject!: (error: unknown) => void
-      const promise = new Promise<void>((ok, fail) => { resolve = ok; reject = fail })
-      appearancePending = { promise, resolve, reject }
-    }
-    clearTimeout(appearanceTimer)
-    appearanceTimer = setTimeout(() => { void flushAppearance().catch(() => {}) }, 250)
-    return appearancePending.promise
-  }
-
-  function onPageHide() { void flushAppearance().catch(() => {}) }
 
   /** auto 时解析为系统实际主题 */
   const resolvedTheme = computed<ResolvedTheme>(() =>
@@ -192,7 +165,10 @@ export const useSettingsStore = defineStore('settings', () => {
   function applyGlassTransparency() {
     const root = document.documentElement
     root.style.setProperty('--lm-glass-opacity', String((100 - glassTransparency.value) / 100))
-    root.style.setProperty('--lm-glass-strong-opacity', String(Math.min(100, 110 - glassTransparency.value) / 100))
+    root.style.setProperty(
+      '--lm-glass-strong-opacity',
+      String(Math.min(100, 110 - glassTransparency.value) / 100),
+    )
   }
 
   function applyBackground() {
@@ -215,23 +191,18 @@ export const useSettingsStore = defineStore('settings', () => {
     else if (key === 'homeFolderId') homeFolderId.value = value as string | null
     else if (key === 'openInNewTab') openInNewTab.value = value === true
     else if (key === 'reduceEffects') reduceEffects.value = value === true
-    else if (key === 'glassTransparency') {
-      savedAppearance.glassTransparency = normalizeTransparency(value)
-      if (!dirtyAppearance.has(key)) applyAppearance(key)
-    }
+    else if (key === 'glassTransparency') appearance.syncSaved(key, normalizeTransparency(value))
     else if (key === 'linkCheckTimeout') linkCheckTimeout.value = normalizeLinkTimeout(value)
     else if (key === 'display') display.value = normalizeDisplay(value)
-    else if (key === 'layout') {
-      savedAppearance.layout = normalizeLayout(value)
-      if (!dirtyAppearance.has(key)) applyAppearance(key)
-    }
+    else if (key === 'layout') appearance.syncSaved(key, normalizeLayout(value))
     else if (!backgroundWriting && key === 'bgKind') bgKind.value = value as BackgroundKind
     else if (!backgroundWriting && key === 'solidBg') solidBg.value = value as string
     else if (!backgroundWriting && key === 'wallpaperId') wallpaperId.value = value as string | null
   }
 
   function onLocalStorageChange(key: string, value: unknown) {
-    if (key === 'wallpaperDataUrl' && !backgroundWriting) wallpaperDataUrl.value = value as string | null
+    if (key === 'wallpaperDataUrl' && !backgroundWriting)
+      wallpaperDataUrl.value = value as string | null
     else if (key === 'linkCheckOptions') linkCheckOptions.value = normalizeLinkCheckOptions(value)
   }
 
@@ -248,19 +219,33 @@ export const useSettingsStore = defineStore('settings', () => {
     const pending = (async () => {
       loadError.value = false
       const [synced, local] = await Promise.all([
-        storageGetMany({ theme: 'auto' as ThemeMode, homeFolderId: null as string | null,
-          openInNewTab: true, reduceEffects: false, glassTransparency: DEFAULT_GLASS_TRANSPARENCY,
-          linkCheckTimeout: DEFAULT_LINK_TIMEOUT, display: normalizeDisplay(null), layout: { ...DEFAULT_LAYOUT },
-          bgKind: 'solid' as BackgroundKind, solidBg: 'gradient-emerald', wallpaperId: null as string | null }),
-        storageGetMany({ linkCheckOptions: { folderId: null, ignoredDomains: [] } as LinkCheckOptions,
-          wallpaperDataUrl: null as string | null }, 'local'),
+        storageGetMany({
+          theme: 'auto' as ThemeMode,
+          homeFolderId: null as string | null,
+          openInNewTab: true,
+          reduceEffects: false,
+          glassTransparency: DEFAULT_GLASS_TRANSPARENCY,
+          linkCheckTimeout: DEFAULT_LINK_TIMEOUT,
+          display: normalizeDisplay(null),
+          layout: { ...DEFAULT_LAYOUT },
+          bgKind: 'solid' as BackgroundKind,
+          solidBg: 'gradient-emerald',
+          wallpaperId: null as string | null,
+        }),
+        storageGetMany(
+          {
+            linkCheckOptions: { folderId: null, ignoredDomains: [] } as LinkCheckOptions,
+            wallpaperDataUrl: null as string | null,
+          },
+          'local',
+        ),
       ])
       theme.value = synced.theme
       homeFolderId.value = synced.homeFolderId
       openInNewTab.value = synced.openInNewTab
       reduceEffects.value = synced.reduceEffects
-      savedAppearance = { layout: normalizeLayout(synced.layout), glassTransparency: normalizeTransparency(synced.glassTransparency) }
-      for (const key of ['layout', 'glassTransparency'] as const) if (!dirtyAppearance.has(key)) applyAppearance(key)
+      appearance.syncSaved('layout', normalizeLayout(synced.layout))
+      appearance.syncSaved('glassTransparency', normalizeTransparency(synced.glassTransparency))
       linkCheckTimeout.value = normalizeLinkTimeout(synced.linkCheckTimeout)
       display.value = normalizeDisplay(synced.display)
       linkCheckOptions.value = normalizeLinkCheckOptions(local.linkCheckOptions)
@@ -300,6 +285,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function dispose() {
     onPageHide()
+    appearance.dispose()
     window.removeEventListener('pagehide', onPageHide)
     stopSyncStorage?.()
     stopSyncStorage = null
@@ -343,7 +329,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setGlassTransparency(value: number) {
     glassTransparency.value = normalizeTransparency(value)
-    return scheduleAppearance('glassTransparency')
+    return appearance.set('glassTransparency', glassTransparency.value)
   }
 
   async function setLinkCheckTimeout(value: number) {
@@ -353,7 +339,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function setDisplay(partial: Partial<DisplaySettings>) {
-    return queueWrite(async () => {
+    return queueWrite.run(async () => {
       const next = normalizeDisplay({ ...display.value, ...partial })
       await storageSet('display', next)
       display.value = next
@@ -361,8 +347,9 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function setLinkCheckOptions(partial: Partial<LinkCheckOptions>) {
-    if (partial.ignoredDomains?.some((domain) => !normalizeIgnoredDomain(domain))) throw new Error('Invalid domain')
-    return queueWrite(async () => {
+    if (partial.ignoredDomains?.some((domain) => !normalizeIgnoredDomain(domain)))
+      throw new Error('Invalid domain')
+    return queueWrite.run(async () => {
       const next = normalizeLinkCheckOptions({ ...linkCheckOptions.value, ...partial })
       await storageSet('linkCheckOptions', next, 'local')
       linkCheckOptions.value = next
@@ -371,18 +358,24 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setLayout(partial: Partial<LayoutSettings>) {
     layout.value = normalizeLayout({ ...layout.value, ...partial })
-    return scheduleAppearance('layout')
+    return appearance.set('layout', { ...layout.value })
   }
 
-  function saveBackground(kind: BackgroundKind, id: string | null, dataUrl: string | null, solid?: string) {
-    return queueWrite(async () => {
+  function saveBackground(
+    kind: BackgroundKind,
+    id: string | null,
+    dataUrl: string | null,
+    solid?: string,
+  ) {
+    return queueWrite.run(async () => {
       const previousData = wallpaperDataUrl.value
       const nextSolid = solid ?? solidBg.value
       backgroundWriting = true
       try {
         await storageSet('wallpaperDataUrl', dataUrl, 'local')
-        try { await storageSetMany({ bgKind: kind, wallpaperId: id, solidBg: nextSolid }) }
-        catch (error) {
+        try {
+          await storageSetMany({ bgKind: kind, wallpaperId: id, solidBg: nextSolid })
+        } catch (error) {
           await storageSet('wallpaperDataUrl', previousData, 'local').catch(() => {})
           throw error
         }
@@ -390,7 +383,9 @@ export const useSettingsStore = defineStore('settings', () => {
         solidBg.value = nextSolid
         wallpaperId.value = id
         wallpaperDataUrl.value = dataUrl
-      } finally { backgroundWriting = false }
+      } finally {
+        backgroundWriting = false
+      }
     })
   }
 
@@ -437,7 +432,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setDisplay,
     setLinkCheckOptions,
     setLayout,
-    flushAppearance,
+    flushAppearance: () => appearance.flush(),
     setSolidBg,
     setPresetWallpaper,
     setUserWallpaper,

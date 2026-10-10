@@ -13,7 +13,11 @@ const segments = computed(() => bookmarks.breadcrumb.filter((node) => node.id !=
 </script>
 
 <template>
-  <nav v-if="segments.length" class="flex min-w-0 items-center gap-1 text-sm" aria-label="breadcrumb">
+  <nav
+    v-if="segments.length"
+    class="flex min-w-0 items-center gap-1 text-sm"
+    aria-label="breadcrumb"
+  >
     <template v-for="(node, index) in segments" :key="node.id">
       <Icon v-if="index > 0" name="chevronRight" class="size-3 shrink-0 text-slate-400" />
       <button

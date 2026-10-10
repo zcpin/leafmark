@@ -8,6 +8,8 @@ export interface ConfirmOptions {
   message: string
   confirmText?: string
   danger?: boolean
+  /** danger 为删除样式（默认）；primary 用于「全部打开」这类非破坏性确认。 */
+  tone?: 'danger' | 'primary'
 }
 
 export interface EditResult {

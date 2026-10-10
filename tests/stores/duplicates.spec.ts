@@ -10,14 +10,40 @@ const url = 'https://example.com/page?x=1#anchor'
 beforeEach(async () => {
   setActivePinia(createPinia())
   chromeMock.__reset()
-  chromeMock.bookmarks.__setTree([{ id: '0', title: '', children: [
-    { id: '1', parentId: '0', title: '书签栏', children: [{ id: '100', parentId: '1', title: 'A', url }] },
-    { id: '2', parentId: '0', title: '其他书签', children: [
-      { id: '200', parentId: '2', title: 'B', url },
-      { id: '201', parentId: '2', title: 'Different hash', url: 'https://example.com/page?x=1#other' },
-      { id: '202', parentId: '2', title: 'Different query', url: 'https://example.com/page?x=2#anchor' },
-    ] },
-  ] }])
+  chromeMock.bookmarks.__setTree([
+    {
+      id: '0',
+      title: '',
+      children: [
+        {
+          id: '1',
+          parentId: '0',
+          title: '书签栏',
+          children: [{ id: '100', parentId: '1', title: 'A', url }],
+        },
+        {
+          id: '2',
+          parentId: '0',
+          title: '其他书签',
+          children: [
+            { id: '200', parentId: '2', title: 'B', url },
+            {
+              id: '201',
+              parentId: '2',
+              title: 'Different hash',
+              url: 'https://example.com/page?x=1#other',
+            },
+            {
+              id: '202',
+              parentId: '2',
+              title: 'Different query',
+              url: 'https://example.com/page?x=2#anchor',
+            },
+          ],
+        },
+      ],
+    },
+  ])
   await useBookmarksStore().load()
 })
 

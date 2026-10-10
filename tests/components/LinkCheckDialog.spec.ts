@@ -13,11 +13,19 @@ import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { chromeMock } from '../mocks/chrome'
 
-vi.mock('@/lib/link-check-permissions', () => ({ supportsLinkCheck: () => true, requestLinkCheckAccess: vi.fn() }))
-vi.mock('@/lib/link-checker', async (original) => ({ ...await original<typeof import('@/lib/link-checker')>(), scanLinks: vi.fn() }))
+vi.mock('@/lib/link-check-permissions', () => ({
+  supportsLinkCheck: () => true,
+  requestLinkCheckAccess: vi.fn(),
+}))
+vi.mock('@/lib/link-checker', async (original) => ({
+  ...(await original<typeof import('@/lib/link-checker')>()),
+  scanLinks: vi.fn(),
+}))
 
 function buttonWithin(root: Element, label: string): HTMLButtonElement {
-  const button = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((item) => item.textContent?.trim().startsWith(label))
+  const button = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
+    item.textContent?.trim().startsWith(label),
+  )
   expect(button).toBeDefined()
   return button!
 }
@@ -27,7 +35,12 @@ beforeEach(async () => {
   chromeMock.__reset()
   vi.mocked(requestLinkCheckAccess).mockResolvedValue(true)
   vi.mocked(scanLinks).mockImplementation(async (targets, _timeout, _signal, onResults) => {
-    onResults(targets.map((target) => ({ ...target, status: target.id === '100' ? 'timeout' : target.id === '101' ? 'restricted' : 'ok' })))
+    onResults(
+      targets.map((target) => ({
+        ...target,
+        status: target.id === '100' ? 'timeout' : target.id === '101' ? 'restricted' : 'ok',
+      })),
+    )
   })
   await Promise.all([useSettingsStore().init(), useBookmarksStore().init()])
 })
@@ -43,7 +56,9 @@ describe('链接检测面板', () => {
       const scope = panel.querySelector<HTMLSelectElement>('select')!
       scope.value = '102'
       scope.dispatchEvent(new Event('change'))
-      await vi.waitFor(() => expect(checker.targets.map((link) => link.url)).toEqual(['https://vuejs.org']))
+      await vi.waitFor(() =>
+        expect(checker.targets.map((link) => link.url)).toEqual(['https://vuejs.org']),
+      )
       panel.querySelector('details')!.open = true
       const ignored = panel.querySelector('textarea')!
       ignored.value = 'vuejs.org'
@@ -89,7 +104,9 @@ describe('链接检测面板', () => {
       await nextTick()
       expect(useUiStore().confirmVisible).toBe(true)
       expect(chromeMock.bookmarks.remove).not.toHaveBeenCalled()
-      const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === '删除')!
+      const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find(
+        (button) => button.textContent?.trim() === '删除',
+      )!
       confirm.click()
       await vi.waitFor(() => expect(chromeMock.bookmarks.__find('100')).toBeUndefined())
       expect(chromeMock.bookmarks.__find('101')).toBeDefined()
@@ -109,7 +126,9 @@ describe('链接检测面板', () => {
       await nextTick()
       const panel = document.body.querySelector('[role="dialog"]')!
       buttonWithin(panel, '开始检测').click()
-      await vi.waitFor(() => expect(panel.querySelector('[role="alert"]')?.textContent).toContain('未获得网站访问权限'))
+      await vi.waitFor(() =>
+        expect(panel.querySelector('[role="alert"]')?.textContent).toContain('未获得网站访问权限'),
+      )
     } finally {
       wrapper.unmount()
       useSettingsStore().dispose()

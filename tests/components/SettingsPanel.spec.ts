@@ -55,8 +55,9 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
     try {
       await bookmarks.init()
       await settings.setHomeFolderId('10')
-      const generalTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
-        .find((button) => button.textContent?.trim() === '通用')
+      const generalTab = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('aside button'),
+      ).find((button) => button.textContent?.trim() === '通用')
       generalTab!.click()
       await nextTick()
       const panel = document.body.querySelector('aside')!
@@ -87,12 +88,14 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
       await bookmarks.init()
       await settings.setHomeFolderId('10')
       bookmarks.setViewFolder('10')
-      const generalTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
-        .find((button) => button.textContent?.trim() === '通用')
+      const generalTab = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('aside button'),
+      ).find((button) => button.textContent?.trim() === '通用')
       generalTab!.click()
       await nextTick()
-      const reset = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
-        .find((button) => button.textContent?.trim() === '恢复默认主页')!
+      const reset = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('aside button'),
+      ).find((button) => button.textContent?.trim() === '恢复默认主页')!
       chromeMock.storage.sync.set.mockImplementationOnce((_items, callback) => {
         chromeMock.runtime.lastError = { message: 'storage unavailable' }
         callback()
@@ -129,12 +132,14 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
     await settings.setHomeFolderId('missing-folder')
     bookmarks.setViewFolder('10')
 
-    const generalTab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
-      .find((button) => button.textContent?.trim() === '通用')
+    const generalTab = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('aside button'),
+    ).find((button) => button.textContent?.trim() === '通用')
     generalTab!.click()
     await nextTick()
-    const reset = Array.from(document.body.querySelectorAll<HTMLButtonElement>('aside button'))
-      .find((button) => button.textContent?.trim() === '恢复默认主页')
+    const reset = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('aside button'),
+    ).find((button) => button.textContent?.trim() === '恢复默认主页')
     expect(reset).toBeDefined()
     expect(reset!.disabled).toBe(false)
     reset!.click()
@@ -179,7 +184,9 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
     const { wrapper, settings } = await openPanel()
     const toasts = mount(ToastStack)
     try {
-      const slider = document.body.querySelector<HTMLInputElement>('input[aria-label="面板透明度"]')!
+      const slider = document.body.querySelector<HTMLInputElement>(
+        'input[aria-label="面板透明度"]',
+      )!
       expect(slider).not.toBeNull()
       slider.value = '0'
       slider.dispatchEvent(new Event('input'))
@@ -229,8 +236,8 @@ describe('SettingsPanel（F2/F3/F5/F6 设置面板）', () => {
     layoutTab.click()
     await nextTick()
 
-    const widthLabel = Array.from(document.body.querySelectorAll('aside label')).find(
-      (label) => label.textContent?.includes('卡片宽度'),
+    const widthLabel = Array.from(document.body.querySelectorAll('aside label')).find((label) =>
+      label.textContent?.includes('卡片宽度'),
     )
     const slider = widthLabel?.querySelector('input[type="range"]') as HTMLInputElement
     expect(slider).not.toBeNull()

@@ -1,7 +1,10 @@
 import { collectLinkTargets, type LinkTarget } from './link-checker'
 import type { BookmarkNode } from './types'
 
-export interface DuplicateGroup { url: string; links: LinkTarget[] }
+export interface DuplicateGroup {
+  url: string
+  links: LinkTarget[]
+}
 
 /** 精确匹配完整 URL，保留参数和片段的差异。 */
 export function findDuplicateLinks(tree: BookmarkNode[]): DuplicateGroup[] {

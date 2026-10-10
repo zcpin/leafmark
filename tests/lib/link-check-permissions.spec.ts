@@ -8,10 +8,15 @@ afterEach(() => vi.unstubAllGlobals())
 describe('链接检测可选权限', () => {
   it('在点击调用栈内立即申请权限，不先等待异步查询', async () => {
     let grant: ((allowed: boolean) => void) | undefined
-    const request = vi.fn((_permissions, callback: (allowed: boolean) => void) => { grant = callback })
+    const request = vi.fn((_permissions, callback: (allowed: boolean) => void) => {
+      grant = callback
+    })
     vi.stubGlobal('chrome', { ...chromeMock, permissions: { request } })
     const pending = requestLinkCheckAccess()
-    expect(request).toHaveBeenCalledWith({ origins: ['http://*/*', 'https://*/*'] }, expect.any(Function))
+    expect(request).toHaveBeenCalledWith(
+      { origins: ['http://*/*', 'https://*/*'] },
+      expect.any(Function),
+    )
     grant?.(true)
     expect(await pending).toBe(true)
   })

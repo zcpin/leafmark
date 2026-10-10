@@ -4,7 +4,17 @@ import { defineStore } from 'pinia'
 import { createBookmark, getChildren, removeBookmark } from '@/lib/chrome-bookmarks'
 import { onStorageChanged, storageGet, storageSet } from '@/lib/chrome-storage'
 import { withBookmarkLock } from '@/lib/bookmark-lock'
-import { deletionEntries, type DeletionResult, type DeletionTarget, type UndoEntry, type UndoNode, type UndoRecord } from '@/lib/bookmark-undo'
+import {
+  deletionEntries,
+  parseUndoStack,
+  pruneUndoStack,
+  UNDO_STACK_VERSION,
+  type DeletionResult,
+  type DeletionTarget,
+  type UndoEntry,
+  type UndoNode,
+  type UndoRecord,
+} from '@/lib/bookmark-undo'
 import { findNode, isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { t } from '@/lib/i18n'
@@ -15,25 +25,48 @@ import { useUiStore } from './ui'
 const KEY = 'bookmarkUndo'
 class UndoPersistenceError extends Error {}
 
-function saveRecord(value: UndoRecord | null) {
-  return storageSet(KEY, value ? JSON.parse(JSON.stringify(value)) : null, 'local')
+/**
+ * 保存撤销栈（最新在前）。配额不足时丢弃最旧的记录而不是整批放弃；
+ * 只有「一条都写不进去」才向上抛出，删除流程据此中止。
+ * 返回真正落库的记录，调用方据此同步内存栈——回退掉的旧记录不能留在内存里。
+ */
+async function saveStack(records: readonly UndoRecord[]): Promise<UndoRecord[]> {
+  let next = pruneUndoStack(records)
+  for (;;) {
+    try {
+      await storageSet(
+        KEY,
+        next.length ? { version: UNDO_STACK_VERSION, records: next } : null,
+        'local',
+      )
+      return next
+    } catch (error) {
+      if (next.length <= 1) throw error
+      next = next.slice(0, -1)
+    }
+  }
 }
 
 export const useDeletionsStore = defineStore('deletions', () => {
   const bookmarks = useBookmarksStore()
   const settings = useSettingsStore()
   const ui = useUiStore()
-  const record = shallowRef<UndoRecord | null>(null)
+  /** 撤销栈，最新在前；一次撤销只处理栈顶那批 */
+  const stack = shallowRef<UndoRecord[]>([])
   const busy = ref(false)
-  const undoCount = computed(() => record.value?.entries.length ?? 0)
+  const undoCount = computed(() => stack.value[0]?.entries.length ?? 0)
+  const undoDepth = computed(() => stack.value.length)
   let initPromise: Promise<void> | null = null
   let unsubscribe: (() => void) | null = null
 
-  function recover(value: UndoRecord | null): UndoRecord | null {
-    if (!value?.entries || !Array.isArray(value.entries)) return null
-    const missing = value.entries.filter((entry) => !findNode(bookmarks.tree, entry.node.id))
-    const entries = missing.length ? missing : (value.previous ?? []).filter((entry) => !findNode(bookmarks.tree, entry.node.id))
-    return entries.length ? { id: value.id, entries, restoredIds: missing.length ? value.restoredIds : value.previousRestoredIds } : null
+  /** 过滤掉已经存在的项；整批都无需恢复的记录直接丢弃，露出更早的那批。 */
+  function recoverStack(value: unknown): UndoRecord[] {
+    const records: UndoRecord[] = []
+    for (const record of parseUndoStack(value)) {
+      const entries = record.entries.filter((entry) => !findNode(bookmarks.tree, entry.node.id))
+      if (entries.length) records.push({ ...record, entries })
+    }
+    return records
   }
 
   function init(): Promise<void> {
@@ -41,13 +74,13 @@ export const useDeletionsStore = defineStore('deletions', () => {
     initPromise = (async () => {
       try {
         await settings.init()
-        const saved = await storageGet<UndoRecord | null>(KEY, null, 'local')
+        const saved = await storageGet<unknown>(KEY, null, 'local')
         await bookmarks.load()
-        if (!bookmarks.error) record.value = recover(saved)
+        if (!bookmarks.error) stack.value = recoverStack(saved)
         unsubscribe ??= onStorageChanged((key, value) => {
           if (key !== KEY || busy.value) return
           void bookmarks.load().then(() => {
-            if (!bookmarks.error && !busy.value) record.value = recover(value as UndoRecord | null)
+            if (!bookmarks.error && !busy.value) stack.value = recoverStack(value)
           })
         }, 'local')
       } catch {
@@ -58,7 +91,10 @@ export const useDeletionsStore = defineStore('deletions', () => {
     return initPromise
   }
 
-  async function remove(targets: DeletionTarget[], guard?: (tree: BookmarkNode[]) => boolean): Promise<DeletionResult> {
+  async function remove(
+    targets: DeletionTarget[],
+    guard?: (tree: BookmarkNode[]) => boolean,
+  ): Promise<DeletionResult> {
     if (busy.value) throw new Error('Deletion in progress')
     await init()
     if (!settings.ready) throw new Error('Settings unavailable')
@@ -68,15 +104,24 @@ export const useDeletionsStore = defineStore('deletions', () => {
       return await withBookmarkLock(async () => {
         await bookmarks.load()
         if (bookmarks.error) throw bookmarks.error
-        record.value = recover(await storageGet<UndoRecord | null>(KEY, null, 'local'))
+        const older = recoverStack(await storageGet<unknown>(KEY, null, 'local'))
+        stack.value = older
         if (guard && !guard(bookmarks.tree)) throw new Error('Bookmarks changed')
         const entries = deletionEntries(bookmarks.tree, targets)
-        const result: DeletionResult = { deleted: [], skipped: targets.length - entries.length, failed: 0 }
+        const result: DeletionResult = {
+          deleted: [],
+          skipped: targets.length - entries.length,
+          failed: 0,
+        }
         if (!entries.length) return result
-        const previous = record.value
-        const prepared: UndoRecord = { id: `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`, entries, previous: previous?.entries, previousRestoredIds: previous?.restoredIds }
+        const prepared: UndoRecord = {
+          id: `${Date.now()}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`,
+          entries,
+        }
         // 先持久化再删除；如果页面中断，可按原 id 是否存在恢复成功删除的项。
-        await saveRecord(prepared)
+        const persisted = await saveStack([prepared, ...older])
+        // 配额不足时末尾的旧记录会被丢弃，内存栈必须与落库结果一致。
+        const kept = persisted.slice(1)
         for (const entry of entries) {
           try {
             await removeBookmark(entry.node.id, entry.node.url === undefined)
@@ -85,11 +130,17 @@ export const useDeletionsStore = defineStore('deletions', () => {
             result.failed++
           }
         }
-        record.value = result.deleted.length
-          ? { id: prepared.id, entries: entries.filter((entry) => result.deleted.includes(entry.node.id)) }
-          : previous
+        stack.value = result.deleted.length
+          ? [
+              {
+                id: prepared.id,
+                entries: entries.filter((entry) => result.deleted.includes(entry.node.id)),
+              },
+              ...kept,
+            ]
+          : kept
         // 即使此处写入失败，预先保存的快照仍可恢复；未删除项通过原 id 过滤。
-        await saveRecord(record.value).catch(() => {})
+        await saveStack(stack.value).catch(() => {})
         await bookmarks.load()
         return result
       })
@@ -98,15 +149,28 @@ export const useDeletionsStore = defineStore('deletions', () => {
     }
   }
 
-  async function restoreNode(node: UndoNode, parentId: string, index: number, checkpoint: () => Promise<void>, claimed: Set<string>): Promise<void> {
+  async function restoreNode(
+    node: UndoNode,
+    parentId: string,
+    index: number,
+    checkpoint: () => Promise<void>,
+    claimed: Set<string>,
+  ): Promise<void> {
     const siblings = await getChildren(parentId)
     let existing = node.restoredId
-      ? findNode(bookmarks.tree, node.restoredId) ?? siblings.find((sibling) => sibling.id === node.restoredId)
+      ? (findNode(bookmarks.tree, node.restoredId) ??
+        siblings.find((sibling) => sibling.id === node.restoredId))
       : undefined
     if (!existing) {
       if (node.pendingCreate?.parentId === parentId) {
         const before = new Set(node.pendingCreate.siblingIds)
-        const candidates = siblings.filter((sibling) => !before.has(sibling.id) && !claimed.has(sibling.id) && sibling.title === node.title && sibling.url === node.url)
+        const candidates = siblings.filter(
+          (sibling) =>
+            !before.has(sibling.id) &&
+            !claimed.has(sibling.id) &&
+            sibling.title === node.title &&
+            sibling.url === node.url,
+        )
         // 无法唯一识别时保留记录供重试，不能猜测或继续创建副本。
         if (candidates.length > 1) throw new Error('Ambiguous restored bookmark')
         existing = candidates[0]
@@ -114,7 +178,12 @@ export const useDeletionsStore = defineStore('deletions', () => {
       if (!existing) {
         node.pendingCreate = { parentId, siblingIds: siblings.map((sibling) => sibling.id) }
         await checkpoint()
-        existing = await createBookmark({ parentId, index: Math.min(index, siblings.length), title: node.title, ...(node.url !== undefined ? { url: node.url } : {}) })
+        existing = await createBookmark({
+          parentId,
+          index: Math.min(index, siblings.length),
+          title: node.title,
+          ...(node.url !== undefined ? { url: node.url } : {}),
+        })
       }
       node.restoredId = existing.id
       claimed.add(existing.id)
@@ -122,7 +191,8 @@ export const useDeletionsStore = defineStore('deletions', () => {
       await checkpoint()
     }
     if (settings.homeFolderId === node.id) await settings.setHomeFolderId(node.restoredId!)
-    if (settings.linkCheckOptions.folderId === node.id) await settings.setLinkCheckOptions({ folderId: node.restoredId! })
+    if (settings.linkCheckOptions.folderId === node.id)
+      await settings.setLinkCheckOptions({ folderId: node.restoredId! })
     if (bookmarks.viewFolderId === node.id) bookmarks.setViewFolder(node.restoredId!)
     for (const [childIndex, child] of (node.children ?? []).entries()) {
       await restoreNode(child, node.restoredId!, childIndex, checkpoint, claimed)
@@ -131,50 +201,66 @@ export const useDeletionsStore = defineStore('deletions', () => {
 
   async function undo() {
     await init()
-    if (busy.value || !record.value) return
-    const expectedId = record.value.id
+    if (busy.value || !stack.value.length) return
+    const expectedId = stack.value[0].id
     busy.value = true
     try {
       await withBookmarkLock(async () => {
-        const saved = await storageGet<UndoRecord | null>(KEY, null, 'local')
+        const saved = await storageGet<unknown>(KEY, null, 'local')
         await bookmarks.load()
         if (bookmarks.error) throw bookmarks.error
-        if (saved?.id !== expectedId) {
-          record.value = recover(saved)
+        if (parseUndoStack(saved)[0]?.id !== expectedId) {
+          stack.value = recoverStack(saved)
           ui.toast(t('undoRecordChanged'))
           return
         }
-        const working = recover(saved)
-        record.value = working
-        if (!working) return
-        const claimed = new Set(working.restoredIds ?? [])
+        const working = recoverStack(saved)
+        stack.value = working
+        const top = working[0]
+        if (!top) return
+        const older = working.slice(1)
+        const claimed = new Set(top.restoredIds ?? [])
         const checkpoint = async () => {
-          working.restoredIds = [...claimed]
-          try { await saveRecord(working) }
-          catch { throw new UndoPersistenceError('Cannot save restore progress') }
+          top.restoredIds = [...claimed]
+          try {
+            await saveStack([top, ...older])
+          } catch {
+            throw new UndoPersistenceError('Cannot save restore progress')
+          }
         }
         function collectRestored(node: UndoNode) {
           if (node.restoredId) claimed.add(node.restoredId)
           node.children?.forEach(collectRestored)
         }
-        working.entries.forEach((entry) => collectRestored(entry.node))
+        top.entries.forEach((entry) => collectRestored(entry.node))
         const pending: UndoEntry[] = []
         let restored = 0
-        const entries = [...working.entries].sort((a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index)
+        const entries = [...top.entries].sort(
+          (a, b) => a.parentId.localeCompare(b.parentId) || a.index - b.index,
+        )
         for (const entry of entries) {
           if (findNode(bookmarks.tree, entry.node.id)) continue
           try {
             const parent = findNode(bookmarks.tree, entry.parentId)
-            await restoreNode(entry.node, parent && isFolder(parent) ? parent.id : '1', entry.index, checkpoint, claimed)
+            await restoreNode(
+              entry.node,
+              parent && isFolder(parent) ? parent.id : '1',
+              entry.index,
+              checkpoint,
+              claimed,
+            )
             restored++
           } catch (error) {
             if (error instanceof UndoPersistenceError) throw error
             pending.push(entry)
           }
         }
-        const nextRecord = pending.length ? { id: working.id, entries: pending, restoredIds: [...claimed] } : null
-        await saveRecord(nextRecord)
-        record.value = nextRecord
+        // 本批全部恢复则弹出栈顶，露出更早的删除；否则把未完成的项留在栈顶。
+        const nextStack = pending.length
+          ? [{ id: top.id, entries: pending, restoredIds: [...claimed] }, ...older]
+          : older
+        await saveStack(nextStack)
+        stack.value = nextStack
         await bookmarks.load()
         ui.toast(t('undoResult', { n: restored, remaining: pending.length }))
       })
@@ -190,5 +276,5 @@ export const useDeletionsStore = defineStore('deletions', () => {
     unsubscribe = null
     initPromise = null
   }
-  return { busy, undoCount, init, remove, undo, dispose }
+  return { busy, undoCount, undoDepth, init, remove, undo, dispose }
 })

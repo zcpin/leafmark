@@ -29,7 +29,8 @@ export function moveDestinationIssue(
   const path = getPath(tree, folderId)
   if (path.some((node) => node.unmodifiable)) return 'unavailable'
   if (path.some((node) => targets.some((target) => target.id === node.id))) return 'insideSelection'
-  if (targets.length > 0 && targets.every((target) => target.parentId === folderId)) return 'sameFolder'
+  if (targets.length > 0 && targets.every((target) => target.parentId === folderId))
+    return 'sameFolder'
   return null
 }
 
@@ -53,8 +54,11 @@ export function moveBookmarks(
       seen.add(target.id)
       const node = findNode(tree, target.id)
       if (
-        !node || !isMovableBookmark(node) || node.parentId !== target.parentId ||
-        node.parentId === folderId || getPath(tree, node.id).some((ancestor) => ancestor.unmodifiable)
+        !node ||
+        !isMovableBookmark(node) ||
+        node.parentId !== target.parentId ||
+        node.parentId === folderId ||
+        getPath(tree, node.id).some((ancestor) => ancestor.unmodifiable)
       ) {
         result.skipped.push(target.id)
         continue

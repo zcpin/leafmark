@@ -64,21 +64,33 @@ function makeChrome() {
     getChildren: vi.fn((id: string, cb: (children: BookmarkNode[]) => void) => {
       cb(cloneTree(findNode(bookmarkState.tree, id)?.children ?? []))
     }),
-    create: vi.fn((details: { parentId?: string; index?: number; title?: string; url?: string }, cb: (node: BookmarkNode) => void): void => {
-      const parentId = details.parentId ?? '1'
-      const parent = findNode(bookmarkState.tree, parentId)!
-      const node: BookmarkNode = { id: String(++bookmarkSequence), parentId, title: details.title ?? '', ...(details.url !== undefined ? { url: details.url } : { children: [] }) }
-      parent.children ??= []
-      parent.children.splice(details.index ?? parent.children.length, 0, node)
-      cb(cloneNode(node))
-      bookmarkEvents.onCreated.__emit(node.id, cloneNode(node))
-    }),
-    update: vi.fn((id: string, changes: { title?: string; url?: string }, cb: (node: BookmarkNode) => void) => {
-      const node = findNode(bookmarkState.tree, id)
-      if (node) Object.assign(node, changes)
-      cb(node ? cloneNode(node) : (undefined as unknown as BookmarkNode))
-      bookmarkEvents.onChanged.__emit(id, changes)
-    }),
+    create: vi.fn(
+      (
+        details: { parentId?: string; index?: number; title?: string; url?: string },
+        cb: (node: BookmarkNode) => void,
+      ): void => {
+        const parentId = details.parentId ?? '1'
+        const parent = findNode(bookmarkState.tree, parentId)!
+        const node: BookmarkNode = {
+          id: String(++bookmarkSequence),
+          parentId,
+          title: details.title ?? '',
+          ...(details.url !== undefined ? { url: details.url } : { children: [] }),
+        }
+        parent.children ??= []
+        parent.children.splice(details.index ?? parent.children.length, 0, node)
+        cb(cloneNode(node))
+        bookmarkEvents.onCreated.__emit(node.id, cloneNode(node))
+      },
+    ),
+    update: vi.fn(
+      (id: string, changes: { title?: string; url?: string }, cb: (node: BookmarkNode) => void) => {
+        const node = findNode(bookmarkState.tree, id)
+        if (node) Object.assign(node, changes)
+        cb(node ? cloneNode(node) : (undefined as unknown as BookmarkNode))
+        bookmarkEvents.onChanged.__emit(id, changes)
+      },
+    ),
     remove: vi.fn((id: string, cb: () => void) => {
       const parentId = findNode(bookmarkState.tree, id)?.parentId
       removeFromParent(bookmarkState.tree, id)
@@ -92,9 +104,15 @@ function makeChrome() {
       bookmarkEvents.onRemoved.__emit(id, { parentId, index: 0 })
     }),
     move: vi.fn(
-      (id: string, dest: { parentId: string; index?: number }, cb: (node: BookmarkNode) => void) => {
+      (
+        id: string,
+        dest: { parentId: string; index?: number },
+        cb: (node: BookmarkNode) => void,
+      ) => {
         const oldParentId = findNode(bookmarkState.tree, id)?.parentId
-        const oldSiblings = oldParentId ? findNode(bookmarkState.tree, oldParentId)?.children ?? [] : []
+        const oldSiblings = oldParentId
+          ? (findNode(bookmarkState.tree, oldParentId)?.children ?? [])
+          : []
         const oldIndex = oldSiblings.findIndex((node) => node.id === id)
         const destination = findNode(bookmarkState.tree, dest.parentId)
         let index = dest.index ?? destination?.children?.length ?? 0

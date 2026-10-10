@@ -137,8 +137,11 @@ export const useBookmarksStore = defineStore('bookmarks', () => {
   }
 
   async function moveBookmarks(targets: readonly BookmarkMoveTarget[], parentId: string) {
-    try { return await moveBatch(targets, parentId) }
-    finally { await load() }
+    try {
+      return await moveBatch(targets, parentId)
+    } finally {
+      await load()
+    }
   }
 
   /** 收集文件夹下全部书签 URL（B3 批量打开用） */

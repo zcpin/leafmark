@@ -70,6 +70,29 @@ jobs:
           overwrite: true
           retention-days: 14
 
+  e2e:
+    name: End-to-end (real Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm typecheck:e2e
+      - run: pnpm build
+      - run: pnpm e2e
+      - name: Save e2e results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: artifacts/e2e-results
+          retention-days: 7
+
   release:
     name: Publish GitHub Release
     needs: checks

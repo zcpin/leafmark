@@ -2,7 +2,8 @@ import type { BookmarkNode } from './types'
 
 export const DEFAULT_LINK_TIMEOUT = 10
 
-export type LinkStatus = 'ok' | 'http-error' | 'timeout' | 'network-error' | 'restricted' | 'unsupported' | 'cancelled'
+export type LinkStatus =
+  'ok' | 'http-error' | 'timeout' | 'network-error' | 'restricted' | 'unsupported' | 'cancelled'
 export interface LinkTarget {
   id: string
   title: string
@@ -34,9 +35,11 @@ export function checkableUrl(raw: string): string | null {
 }
 
 export function collectLinkTargets(nodes: BookmarkNode[], path: string[] = []): LinkTarget[] {
-  return nodes.flatMap((node) => node.url !== undefined
-    ? [{ id: node.id, title: node.title, url: node.url, folder: path.join(' / ') }]
-    : collectLinkTargets(node.children ?? [], node.title ? [...path, node.title] : path))
+  return nodes.flatMap((node) =>
+    node.url !== undefined
+      ? [{ id: node.id, title: node.title, url: node.url, folder: path.join(' / ') }]
+      : collectLinkTargets(node.children ?? [], node.title ? [...path, node.title] : path),
+  )
 }
 
 export function isUnreachable(status: LinkStatus): boolean {
@@ -57,7 +60,9 @@ export async function checkLink(
   const controller = new AbortController()
   let abortStatus: 'timeout' | 'cancelled' = 'cancelled'
   let interrupt: (result: LinkProbe) => void = () => {}
-  const interrupted = new Promise<LinkProbe>((resolve) => { interrupt = resolve })
+  const interrupted = new Promise<LinkProbe>((resolve) => {
+    interrupt = resolve
+  })
   const cancel = () => {
     controller.abort()
     interrupt({ status: abortStatus })
@@ -81,12 +86,18 @@ export async function checkLink(
       void response.body?.cancel().catch(() => {})
       if (response.status === 405 || response.status === 501) {
         if (controller.signal.aborted) return { status: abortStatus }
-        response = await request(url, { ...options, method: 'GET', headers: { Range: 'bytes=0-0' } })
+        response = await request(url, {
+          ...options,
+          method: 'GET',
+          headers: { Range: 'bytes=0-0' },
+        })
         void response.body?.cancel().catch(() => {})
       }
       if (controller.signal.aborted) return { status: abortStatus }
-      if ([401, 403, 407, 429].includes(response.status)) return { status: 'restricted', httpStatus: response.status }
-      if (response.status >= 200 && response.status < 400) return { status: 'ok', httpStatus: response.status }
+      if ([401, 403, 407, 429].includes(response.status))
+        return { status: 'restricted', httpStatus: response.status }
+      if (response.status >= 200 && response.status < 400)
+        return { status: 'ok', httpStatus: response.status }
       if (response.status >= 400) return { status: 'http-error', httpStatus: response.status }
       return { status: 'network-error' }
     } catch {
@@ -124,7 +135,12 @@ export async function scanLinks(
     while (!signal.aborted) {
       const group = groups[next++]
       if (!group) return
-      const result = await checkLink(group[0]!.url, normalizeLinkTimeout(timeoutSeconds) * 1000, signal, request)
+      const result = await checkLink(
+        group[0]!.url,
+        normalizeLinkTimeout(timeoutSeconds) * 1000,
+        signal,
+        request,
+      )
       if (signal.aborted || result.status === 'cancelled') return
       onResults(group.map((target) => ({ ...target, ...result })))
     }

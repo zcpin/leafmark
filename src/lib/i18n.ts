@@ -25,8 +25,10 @@ const messages = {
     homeReset: 'Default homepage restored',
     homeFolder: 'Homepage folder',
     homeFolderUnavailable: 'Homepage folder unavailable',
-    homeFolderUnavailableHint: 'New tabs will open the default bookmarks bar. Restore the default homepage or choose another folder.',
-    homeSaveFailed: 'Could not save the homepage. Your previous setting is unchanged. Please try again.',
+    homeFolderUnavailableHint:
+      'New tabs will open the default bookmarks bar. Restore the default homepage or choose another folder.',
+    homeSaveFailed:
+      'Could not save the homepage. Your previous setting is unchanged. Please try again.',
     homeSaving: 'Saving…',
     defaultHomeHint: 'New tabs open the bookmarks bar by default.',
     customHomeHint: 'New tabs open the folder selected with “Set as homepage”.',
@@ -39,12 +41,18 @@ const messages = {
     download: 'Download',
     qrCode: 'QR Code',
     openAll: 'Open all',
+    openAllConfirmTitle: 'Open all bookmarks',
+    openAllConfirmMessage: 'This will open {n} tabs at once. Continue?',
+    openAllLimitTitle: 'Too many tabs to open',
+    openAllLimitMessage:
+      'This folder holds {n} bookmarks, but only {limit} can be opened at once. Continuing opens the first {limit}.',
     edit: 'Edit',
     delete: 'Delete',
     deleteBookmarkTitle: 'Delete bookmark',
     deleteBookmarkMessage: 'Delete this bookmark? The most recent deletion can be undone.',
     deleteFolderTitle: 'Delete folder',
-    deleteFolderMessage: 'Delete this folder and all bookmarks inside? The most recent deletion can be undone.',
+    deleteFolderMessage:
+      'Delete this folder and all bookmarks inside? The most recent deletion can be undone.',
     cancel: 'Cancel',
     confirmDelete: 'Delete',
     save: 'Save',
@@ -60,6 +68,16 @@ const messages = {
     settingsReduceEffects: 'Reduce visual effects (disable blur)',
     dropToEnd: 'Move to end',
     settings: 'Settings',
+    search: 'Search',
+    searchPlaceholder: 'Search bookmarks',
+    searchAllBookmarks: 'All bookmarks',
+    searchInFolder: 'This folder only',
+    searchResultsCount: '{n} results',
+    searchNoResults: 'No matching bookmarks',
+    searchNoResultsHint: 'Try another keyword, or switch the search scope.',
+    searchTruncated: '{n} more not shown — add another keyword to narrow it down.',
+    searchClear: 'Clear',
+    searchClose: 'Close search',
     bookmarkMoveFailed: 'Could not move the bookmark. Please try again.',
     multiSelect: 'Select items',
     selectionCount: '{n} selected',
@@ -67,7 +85,8 @@ const messages = {
     selectionAll: 'Select all',
     selectionClear: 'Clear selection',
     selectionDone: 'Done',
-    selectionChanged: 'The selected items are no longer in this folder. Close this dialog and select again.',
+    selectionChanged:
+      'The selected items are no longer in this folder. Close this dialog and select again.',
     moveToFolder: 'Move to…',
     moveDestination: 'Destination folder',
     moveFolderUnavailable: 'Unavailable or managed folder',
@@ -78,7 +97,8 @@ const messages = {
     batchMoveConfirm: 'Move {n} items here',
     batchMoving: 'Moving…',
     batchMoveResult: 'Moved {n} items; {skipped} changed or unavailable items were skipped.',
-    batchMovePartial: 'Moved {n} items. {remaining} items could not be moved and remain selected. Retry or choose another folder.',
+    batchMovePartial:
+      'Moved {n} items. {remaining} items could not be moved and remain selected. Retry or choose another folder.',
     batchMoveFailed: 'Could not finish the move. Check the destination folder and try again.',
     duplicateTitle: 'Duplicate bookmarks',
     duplicateHint: 'Group identical full URLs and choose which copies to remove.',
@@ -91,13 +111,15 @@ const messages = {
     duplicateKept: 'Keep',
     duplicateKeepOne: 'Keep at least one copy of each URL.',
     duplicateDeleteTitle: 'Delete duplicate copies',
-    duplicateDeleteConfirm: 'Delete {n} selected duplicate copies? You can undo the most recent deletion.',
+    duplicateDeleteConfirm:
+      'Delete {n} selected duplicate copies? You can undo the most recent deletion.',
     duplicateChanged: 'Bookmarks changed or could not be safely deleted. Refresh and try again.',
     undoDelete: 'Undo deletion ({n})',
     undoWorking: 'Working…',
     undoResult: 'Restored {n} items; {remaining} items can be retried.',
     undoFailed: 'Could not finish restoring. Please try again.',
     undoRecordChanged: 'The most recent deletion changed. Please choose Undo again.',
+    undoMoreHint: '{n} earlier deletion(s) can still be undone.',
     deleteUndoResult: 'Deleted {n} items; kept {remaining}. Use Undo deletion to restore.',
     deleteUndoFailed: 'Could not safely save an undo record or delete the items. Please try again.',
     close: 'Close',
@@ -113,7 +135,8 @@ const messages = {
     linkCheckScopeMissing: 'The selected folder is unavailable. Choose another folder.',
     linkCheckIgnored: 'Ignored domains ({n}) · {skipped} links excluded',
     linkCheckIgnoreLabel: 'Ignored domains',
-    linkCheckIgnoreHint: 'One domain per line, including its subdomains. Save to apply. Changing scope or this list clears old results.',
+    linkCheckIgnoreHint:
+      'One domain per line, including its subdomains. Save to apply. Changing scope or this list clears old results.',
     linkCheckSaveIgnored: 'Save ignore list',
     linkCheckIgnoreUnsaved: 'Save the ignore list before starting a check.',
     linkCheckDomainInvalid: 'Enter valid domain names or HTTP/HTTPS website addresses.',
@@ -122,7 +145,8 @@ const messages = {
     linkCheckStop: 'Stop checking',
     linkCheckRetry: 'Retry unreachable links',
     linkCheckCount: '{n} links to check',
-    linkCheckPermissionHint: 'Starting a check asks for website access and connects directly to bookmarked sites. Only HTTP/HTTPS web links are checked.',
+    linkCheckPermissionHint:
+      'Starting a check asks for website access and connects directly to bookmarked sites. Only HTTP/HTTPS web links are checked.',
     linkCheckPermissionDenied: 'Website access was not granted. No links were checked.',
     linkCheckExtensionOnly: 'Use this tool from the installed extension’s new tab page.',
     linkCheckFailed: 'Could not start the check. Check website access and try again.',
@@ -144,14 +168,17 @@ const messages = {
     linkCheckSelect: 'Select {title}',
     linkCheckStale: 'This bookmark changed or was removed. Check it again before deleting.',
     linkCheckOpen: 'Open to verify',
-    linkCheckReviewHint: 'Login requirements and site restrictions can affect results. Verify links before deleting. Closing this panel stops the check.',
+    linkCheckReviewHint:
+      'Login requirements and site restrictions can affect results. Verify links before deleting. Closing this panel stops the check.',
     linkCheckSelectVisible: 'Select issues in this list',
     linkCheckDeleteSelected: 'Delete selected ({n})',
     linkCheckDeleting: 'Deleting…',
     linkCheckDeleteTitle: 'Delete selected bookmarks',
-    linkCheckDeleteConfirm: 'Delete these {n} selected bookmarks? The most recent deletion can be undone.',
+    linkCheckDeleteConfirm:
+      'Delete these {n} selected bookmarks? The most recent deletion can be undone.',
     linkCheckDeleteFailed: 'Could not refresh bookmarks. Nothing was deleted; please try again.',
-    linkCheckDeleteResult: 'Deleted {n} bookmarks; {remaining} unchanged or failed items were kept.',
+    linkCheckDeleteResult:
+      'Deleted {n} bookmarks; {remaining} unchanged or failed items were kept.',
     bookmarksCount: '{n} bookmarks',
     openAllHint: 'Right-click a folder → Open all',
     yearProgress: '{year} progress',
@@ -239,6 +266,11 @@ const messages = {
     download: '下载',
     qrCode: '二维码',
     openAll: '全部打开',
+    openAllConfirmTitle: '打开全部书签',
+    openAllConfirmMessage: '将一次打开 {n} 个标签页，是否继续？',
+    openAllLimitTitle: '标签页数量超出上限',
+    openAllLimitMessage:
+      '这个文件夹有 {n} 个书签，一次最多打开 {limit} 个。继续将只打开前 {limit} 个。',
     edit: '编辑',
     delete: '删除',
     deleteBookmarkTitle: '删除书签',
@@ -260,6 +292,16 @@ const messages = {
     settingsReduceEffects: '减弱视觉效果（关闭毛玻璃模糊）',
     dropToEnd: '移到末尾',
     settings: '设置',
+    search: '搜索',
+    searchPlaceholder: '搜索书签',
+    searchAllBookmarks: '全部书签',
+    searchInFolder: '仅当前目录',
+    searchResultsCount: '{n} 条结果',
+    searchNoResults: '没有匹配的书签',
+    searchNoResultsHint: '换个关键词，或切换搜索范围。',
+    searchTruncated: '另有 {n} 条未显示，补充关键词可缩小范围。',
+    searchClear: '清空',
+    searchClose: '关闭搜索',
     bookmarkMoveFailed: '书签移动失败，请重试。',
     multiSelect: '多选',
     selectionCount: '已选 {n} 项',
@@ -278,7 +320,8 @@ const messages = {
     batchMoveConfirm: '移动 {n} 项到此处',
     batchMoving: '正在移动…',
     batchMoveResult: '已移动 {n} 项，跳过 {skipped} 个已变更或不可用的项目。',
-    batchMovePartial: '已移动 {n} 项，另有 {remaining} 项移动失败并保留选中，可重试或改选目标目录。',
+    batchMovePartial:
+      '已移动 {n} 项，另有 {remaining} 项移动失败并保留选中，可重试或改选目标目录。',
     batchMoveFailed: '未能完成移动，请确认目标目录可用后重试。',
     duplicateTitle: '重复书签检测',
     duplicateHint: '按完整网址精确分组，选择需要删除的副本。',
@@ -298,6 +341,7 @@ const messages = {
     undoResult: '已恢复 {n} 项，还有 {remaining} 项可重试。',
     undoFailed: '恢复未完成，请重试。',
     undoRecordChanged: '最近一次删除记录已更新，请重新点击撤销。',
+    undoMoreHint: '还有 {n} 批更早的删除可以继续撤销。',
     deleteUndoResult: '已删除 {n} 项，保留 {remaining} 项。可通过“撤销删除”恢复。',
     deleteUndoFailed: '无法安全保存撤销记录或完成删除，请重试。',
     close: '关闭',
@@ -322,7 +366,8 @@ const messages = {
     linkCheckStop: '停止检测',
     linkCheckRetry: '重试不可访问链接',
     linkCheckCount: '{n} 个待检测链接',
-    linkCheckPermissionHint: '开始检测时会申请网站访问权限，并直接访问收藏网址。仅检测 HTTP/HTTPS 网页链接。',
+    linkCheckPermissionHint:
+      '开始检测时会申请网站访问权限，并直接访问收藏网址。仅检测 HTTP/HTTPS 网页链接。',
     linkCheckPermissionDenied: '未获得网站访问权限，本次未检测任何链接。',
     linkCheckExtensionOnly: '请在已安装扩展的新标签页中使用检测功能。',
     linkCheckFailed: '检测未能开始，请检查网站访问权限后重试。',
@@ -344,7 +389,8 @@ const messages = {
     linkCheckSelect: '选择 {title}',
     linkCheckStale: '书签已变更或删除，请重新检测后再处理。',
     linkCheckOpen: '打开核实',
-    linkCheckReviewHint: '登录要求或网站限制可能影响结果，建议打开核实后再删除。关闭此面板会停止检测。',
+    linkCheckReviewHint:
+      '登录要求或网站限制可能影响结果，建议打开核实后再删除。关闭此面板会停止检测。',
     linkCheckSelectVisible: '选择当前列表中的异常项',
     linkCheckDeleteSelected: '删除所选（{n}）',
     linkCheckDeleting: '正在删除…',
@@ -408,13 +454,42 @@ const messages = {
 export type MessageKey = keyof (typeof messages)['en']
 type Locale = keyof typeof messages
 
+// 语言标签在一次页面生命周期内不会变化，但 t() 在大网格下会被调用上万次。
+// 这里只探测一次并缓存，避免每张卡片都跨进程读取 chrome.i18n。
+let cachedLanguage: string | null = null
+let cachedLocale: Locale | null = null
+
+function detectLanguage(): string {
+  let raw: string
+  try {
+    raw =
+      typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage
+        ? String(chrome.i18n.getUILanguage() ?? '')
+        : String(navigator.language ?? '')
+  } catch {
+    return 'en-US'
+  }
+  return raw || 'en-US'
+}
+
+/** 原始语言标签（zh-CN / en-US …），供 Intl 直接使用 */
+export function uiLanguage(): string {
+  return (cachedLanguage ??= detectLanguage())
+}
+
 /** 当前 UI 语言代码（'zh_CN' | 'en'）——Clock 等组件复用 */
 export function uiLocale(): Locale {
-  const raw =
-    typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage
-      ? chrome.i18n.getUILanguage()
-      : navigator.language
-  return raw.toLowerCase().startsWith('zh') ? 'zh_CN' : 'en'
+  return (cachedLocale ??= uiLanguage().toLowerCase().startsWith('zh') ? 'zh_CN' : 'en')
+}
+
+/** 清空语言缓存，下次读取时重新探测。语言切换事件与测试使用。 */
+export function resetUiLocaleCache(): void {
+  cachedLanguage = null
+  cachedLocale = null
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('languagechange', resetUiLocaleCache)
 }
 
 export function t(key: MessageKey, params?: Record<string, string | number>): string {

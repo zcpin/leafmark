@@ -11,37 +11,51 @@ import {
   provide,
   ref,
   useId,
+  useTemplateRef,
   watch,
 } from 'vue'
 
+import { useCardDrag } from '@/composables/useCardDrag'
+import { useFolderPanel } from '@/composables/useFolderPanel'
 import { useHoverIntent } from '@/composables/useHoverIntent'
 import { POPUP_CONTEXT } from '@/composables/popup-context'
 import { executeBookmarkAction } from '@/lib/bookmark-actions'
+import { buildCardMenuItems, type CardMenuKey } from '@/lib/card-menu'
 import { isMovableBookmark } from '@/lib/bookmark-move'
-import { cardDropZone, resolveCardDrop, type CardDropZone } from '@/lib/drag-utils'
 import { faviconUrl } from '@/lib/favicon'
 import { t } from '@/lib/i18n'
 import { openAllInGroup, openUrl } from '@/lib/tabs'
-import { computePopupPosition, popupPageSize } from '@/lib/popup-position'
 import { isFolder } from '@/lib/tree-utils'
 import type { BookmarkNode } from '@/lib/types'
 import { useBookmarksStore } from '@/stores/bookmarks'
+import { useSearchStore } from '@/stores/search'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 import { useDeletionsStore } from '@/stores/deletions'
 import { useSelectionStore } from '@/stores/selection'
 
-import ContextMenu, { type MenuItem } from './ContextMenu.vue'
+import ContextMenu from './ContextMenu.vue'
 import Icon from './Icon.vue'
 
-const props = defineProps<{ node: BookmarkNode }>()
+const props = defineProps<{
+  node: BookmarkNode
+  /** 在网格中的序号；方向键导航用它定位（弹出面板内的卡片不传） */
+  index?: number
+  /** roving tabindex：网格内只有当前焦点项为 0 */
+  tabIndex?: number
+  /** 搜索结果里的所在文件夹标题链；仅在结果视图下渲染 */
+  path?: string[]
+  /** 结果视图：禁用悬停面板与拖拽，文件夹点击改为直接进入 */
+  resultMode?: boolean
+}>()
 
 const bookmarks = useBookmarksStore()
+const search = useSearchStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const deletions = useDeletionsStore()
 const selection = useSelectionStore()
-const selected = computed(() => selection.selectedIds.includes(props.node.id))
+const selected = computed(() => selection.selectedIdSet.has(props.node.id))
 const selectable = computed(() => isMovableBookmark(props.node))
 
 const isDir = computed(() => isFolder(props.node))
@@ -74,6 +88,19 @@ function leavePopup() {
 
 provide(POPUP_CONTEXT, { rootId, enter: enterPopup, leave: leavePopup, close: closeChain })
 
+// —— A9 悬停面板：分页 / 定位 / 全局关闭监听都在 useFolderPanel ——
+const panelEl = useTemplateRef<HTMLElement>('panelEl')
+const { panelPos, panelPage, pageCount, pageChildren } = useFolderPanel({
+  enabled: () => isDir.value,
+  children: () => children.value,
+  cardEl,
+  panelEl,
+  isOpen: intent.isOpen,
+  chainId: rootId,
+  inPopup,
+  onClose: closeChain,
+})
+
 // favicon：扩展环境走 _favicon；开发预览/加载失败回退首字母头像（零网络请求）
 const favFailed = ref(false)
 watch(
@@ -89,7 +116,8 @@ const initial = computed(() => (props.node.title.trim().charAt(0) || '?').toUppe
 
 function onOpenBookmark(event?: MouseEvent | KeyboardEvent) {
   if (!props.node.url) return
-  const shortcut = event && (event.ctrlKey || event.metaKey || ('button' in event && event.button === 1))
+  const shortcut =
+    event && (event.ctrlKey || event.metaKey || ('button' in event && event.button === 1))
   if (shortcut) openUrl(props.node.url, true, !!event.shiftKey)
   else {
     openUrl(props.node.url, settings.openInNewTab)
@@ -105,11 +133,17 @@ function onCardClick(event: MouseEvent) {
     return
   }
   if (isDir.value) onFolderClick()
-  else { event.preventDefault(); onOpenBookmark(event) }
+  else {
+    event.preventDefault()
+    onOpenBookmark(event)
+  }
 }
 
 function onAuxClick(event: MouseEvent) {
-  if (selection.active) { event.preventDefault(); return }
+  if (selection.active) {
+    event.preventDefault()
+    return
+  }
   if (event.button !== 1 || isDir.value) return
   event.preventDefault()
   onOpenBookmark(event)
@@ -135,165 +169,68 @@ function onCardKeydown(event: KeyboardEvent) {
 
 /** 触屏兜底（A9 规格）：无 hover 场景下单击文件夹立即弹出 */
 function onFolderClick() {
+  // 结果视图里的文件夹卡片：直接进入该文件夹并结束搜索
+  if (props.resultMode) {
+    search.close()
+    bookmarks.setViewFolder(props.node.id)
+    return
+  }
   if (!intent.isOpen.value) intent.openNow()
+}
+
+/** 结果视图里的路径副标题：跳到该书签所在目录并结束搜索 */
+function openContainingFolder() {
+  const parentId = props.node.parentId
+  if (!parentId) return
+  search.close()
+  bookmarks.setViewFolder(parentId)
 }
 
 // —— A4 拖拽排序（HTML5 DnD，原生）——
 // 拖拽进行中抑制悬停弹窗触发（A4 × A9 互斥）
-const dragging = ref(false)
-const dropZone = ref<CardDropZone | null>(null)
-
-watch(() => selection.active, (active) => {
-  if (active) { intent.closeNow(); menu.value = null; dropZone.value = null }
-})
-
-if (isDir.value) {
-  watch(() => bookmarks.draggingId, (id, previous) => {
-    if (previous && !id) intent.closeNow()
-  })
-}
-
-function onDragStart(e: DragEvent) {
-  if (selection.active) { e.preventDefault(); return }
-  dragging.value = true
-  bookmarks.draggingId = props.node.id
-  intent.closeNow()
-  if (e.dataTransfer) {
-    e.dataTransfer.setData('text/plain', props.node.id)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-}
-
-function onDragEnd() {
-  dragging.value = false
-  dropZone.value = null
-  if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
-}
-
-function onDragOver(e: DragEvent) {
-  if (selection.active) return
-  const rect = cardEl.value?.getBoundingClientRect()
-  if (!rect) return
-  const zone = cardDropZone(e.clientX, rect.left, rect.width, isDir.value)
-  const sourceId = bookmarks.draggingId || e.dataTransfer?.getData('text/plain')
-  if (!sourceId || !resolveCardDrop(bookmarks.tree, sourceId, props.node.id, zone)) {
-    dropZone.value = null
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none'
-    return
-  }
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dropZone.value = zone
-}
-
-function onDragLeave(e: DragEvent) {
-  if (e.relatedTarget instanceof Node && cardEl.value?.contains(e.relatedTarget)) return
-  dropZone.value = null
-}
-
-/** 落点与视觉提示使用同一规则，目标位置来自实际父目录（包含级联面板）。 */
-async function onDrop(e: DragEvent) {
-  e.preventDefault()
-  if (selection.active) return
-  const sourceId = e.dataTransfer?.getData('text/plain')
-  const rect = cardEl.value?.getBoundingClientRect()
-  const zone = rect ? cardDropZone(e.clientX, rect.left, rect.width, isDir.value) : isDir.value ? 'inside' : 'after'
-  dropZone.value = null
-  try {
-    if (!sourceId) return
-    const destination = resolveCardDrop(bookmarks.tree, sourceId, props.node.id, zone)
-    if (destination) await bookmarks.moveBookmark(sourceId, destination.parentId, destination.index)
-  } catch {
-    ui.toast(t('bookmarkMoveFailed'))
-    await bookmarks.load()
-  } finally {
-    bookmarks.draggingId = null
-  }
-}
-
-// —— A9 弹出面板定位：主页面卡片在下方展开，级联层在右侧；视口边缘翻转 ——
-const panelEl = ref<HTMLElement>()
-const panelPos = ref<Record<string, string>>({ visibility: 'hidden' })
-const panelPage = ref(0)
-const pageSize = ref(1)
-const pageCount = computed(() => Math.max(1, Math.ceil(children.value.length / pageSize.value)))
-const pageChildren = computed(() => children.value.slice(panelPage.value * pageSize.value, (panelPage.value + 1) * pageSize.value))
-
-function updatePanelSize() {
-  if (!intent.isOpen.value) return
-  pageSize.value = popupPageSize({ width: window.innerWidth, height: window.innerHeight }, settings.layout.cardHeight)
-  panelPage.value = Math.min(panelPage.value, pageCount.value - 1)
-  void nextTick(() => { if (intent.isOpen.value) positionPanel() })
-}
-
-if (isDir.value) watch([children, () => settings.layout.cardHeight, panelPage], updatePanelSize)
-
-function positionPanel() {
-  const el = panelEl.value
-  const anchor = cardEl.value
-  if (!el || !anchor) return
-  const rect = anchor.getBoundingClientRect()
-  const { offsetWidth: w, offsetHeight: h } = el
-  const margin = 8
-
-  const { left, top } = computePopupPosition(
-    rect,
-    { width: w, height: h },
-    { width: window.innerWidth, height: window.innerHeight },
-    inPopup,
-    margin,
-  )
-  panelPos.value = { left: `${left}px`, top: `${top}px`, visibility: 'visible' }
-}
-
-function onPanelKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !e.defaultPrevented) {
-    e.preventDefault()
-    closeChain(true)
-  }
-}
-
-function onPanelScroll() {
-  if (bookmarks.draggingId) return
-  closeChain()
-}
-
-function onOutsidePointer(e: PointerEvent) {
-  const target = e.target instanceof Element ? e.target : null
-  if (target?.closest('[data-popup-chain]')?.getAttribute('data-popup-chain') !== rootId) closeChain()
-}
-
-watch(
-  () => intent.isOpen.value,
-  (open, _previous, onCleanup) => {
-    if (!open) return
-    panelPage.value = 0
-    updatePanelSize()
-    let active = true
-    onCleanup(() => {
-      active = false
-      window.removeEventListener('keydown', onPanelKeydown)
-      window.removeEventListener('scroll', onPanelScroll, true)
-      window.removeEventListener('pointerdown', onOutsidePointer)
-      window.removeEventListener('resize', updatePanelSize)
-    })
-    void nextTick(() => {
-      if (!active) return
-      positionPanel()
-      window.addEventListener('keydown', onPanelKeydown)
-      window.addEventListener('scroll', onPanelScroll, { capture: true, passive: true })
-      window.addEventListener('pointerdown', onOutsidePointer)
-      window.addEventListener('resize', updatePanelSize)
-    })
-  },
-)
-
-onBeforeUnmount(() => {
-  if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
+const {
+  dragging,
+  dropZone,
+  reset: resetDropZone,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+} = useCardDrag({
+  node: () => props.node,
+  isDir: () => isDir.value,
+  resultMode: () => props.resultMode === true,
+  cardEl,
+  onBegin: () => intent.closeNow(),
 })
 
 // —— 右键菜单 ——
 const menu = ref<{ x: number; y: number } | null>(null)
+
+watch(
+  () => selection.active,
+  (active) => {
+    if (active) {
+      intent.closeNow()
+      menu.value = null
+      resetDropZone()
+    }
+  },
+)
+
+if (isDir.value) {
+  watch(
+    () => bookmarks.draggingId,
+    (id, previous) => {
+      if (previous && !id) intent.closeNow()
+    },
+  )
+}
+
+onBeforeUnmount(() => {
+  if (bookmarks.draggingId === props.node.id) bookmarks.draggingId = null
+})
 
 function onContextMenu(e: MouseEvent) {
   e.preventDefault()
@@ -302,30 +239,16 @@ function onContextMenu(e: MouseEvent) {
   menu.value = { x: e.clientX, y: e.clientY }
 }
 
-const menuItems = computed<MenuItem[]>(() =>
-  isDir.value
-    ? [
-        settings.homeFolderId === props.node.id
-          ? { key: 'resetHome', label: t('resetHome'), icon: 'home' }
-          : { key: 'home', label: t('setAsHome'), icon: 'home' },
-        { key: 'openAll', label: t('openAll'), icon: 'externalLink' },
-        { key: 'edit', label: t('edit'), icon: 'edit' },
-        ...(selectable.value ? [{ key: 'select', label: t('multiSelect'), icon: 'select' as const }] : []),
-        { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
-      ]
-    : [
-        settings.openInNewTab
-          ? { key: 'openCurrent', label: t('openInCurrentTab'), icon: 'externalLink' }
-          : { key: 'openNew', label: t('openInNewTab'), icon: 'externalLink' },
-        { key: 'copy', label: t('copyUrl'), icon: 'copy' },
-        { key: 'qr', label: t('qrCode'), icon: 'externalLink' },
-        { key: 'edit', label: t('edit'), icon: 'edit' },
-        ...(selectable.value ? [{ key: 'select', label: t('multiSelect'), icon: 'select' as const }] : []),
-        { key: 'delete', label: t('delete'), icon: 'trash', danger: true },
-      ],
+const menuItems = computed(() =>
+  buildCardMenuItems({
+    isFolder: isDir.value,
+    isHomeFolder: settings.homeFolderId === props.node.id,
+    openInNewTab: settings.openInNewTab,
+    selectable: selectable.value,
+  }),
 )
 
-async function onMenuSelect(key: string) {
+async function onMenuSelect(key: CardMenuKey) {
   menu.value = null
   cardEl.value?.focus()
   if (key === 'select') {
@@ -366,11 +289,14 @@ async function onMenuSelect(key: string) {
     :aria-expanded="!selection.active && isDir ? intent.isOpen.value : undefined"
     :aria-checked="selection.active ? selected : undefined"
     :aria-disabled="selection.active ? !selectable || selection.busy : undefined"
-    tabindex="0"
+    :data-card-index="props.index"
+    :tabindex="props.tabIndex ?? 0"
     style="height: var(--lm-card-height, 48px)"
-    :draggable="!selection.active"
+    :draggable="!selection.active && !props.resultMode"
     @contextmenu="onContextMenu"
-    @mouseenter="isDir && !selection.active && !bookmarks.draggingId && enterPopup()"
+    @mouseenter="
+      isDir && !props.resultMode && !selection.active && !bookmarks.draggingId && enterPopup()
+    "
     @mouseleave="isDir && leavePopup()"
     @click="onCardClick"
     @auxclick="onAuxClick"
@@ -382,7 +308,16 @@ async function onMenuSelect(key: string) {
     @dragleave.stop="onDragLeave"
     @drop.stop="onDrop"
   >
-    <span v-if="selection.active" aria-hidden="true" class="flex size-4 shrink-0 items-center justify-center rounded border" :class="selected ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-slate-950' : 'border-slate-500 dark:border-slate-400'">
+    <span
+      v-if="selection.active"
+      aria-hidden="true"
+      class="flex size-4 shrink-0 items-center justify-center rounded border"
+      :class="
+        selected
+          ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-slate-950'
+          : 'border-slate-500 dark:border-slate-400'
+      "
+    >
       <Icon v-if="selected" name="check" class="size-3" />
     </span>
     <!-- 文件夹 -->
@@ -422,6 +357,19 @@ async function onMenuSelect(key: string) {
       </span>
     </template>
 
+    <!-- 搜索结果：所在文件夹路径，点击进入该目录 -->
+    <button
+      v-if="props.resultMode && props.path && props.path.length > 0"
+      type="button"
+      class="hidden max-w-40 shrink-0 truncate rounded-md px-1.5 py-0.5 text-xs text-slate-400 transition-colors hover:bg-slate-500/10 hover:text-slate-600 sm:block dark:text-slate-500 dark:hover:bg-white/10 dark:hover:text-slate-300"
+      :title="props.path.join(' / ')"
+      @click.stop="openContainingFolder"
+      @keydown.enter.stop.prevent="openContainingFolder"
+      @keydown.space.stop.prevent="openContainingFolder"
+    >
+      {{ props.path.join(' / ') }}
+    </button>
+
     <!-- A9 弹出面板：卡片网格（与主页面页签一致，多列换行、无滚动条），自引用实现级联 -->
     <Teleport to="body">
       <div
@@ -450,10 +398,34 @@ async function onMenuSelect(key: string) {
         >
           <BookmarkCard v-for="child in pageChildren" :key="child.id" :node="child" />
         </div>
-        <nav v-if="pageCount > 1" :aria-label="t('folderPages')" class="mt-3 flex h-7 items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <button type="button" :aria-label="t('previousPage')" :disabled="panelPage === 0" class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30" @click="panelPage--">‹</button>
-          <span aria-live="polite" :aria-label="t('folderPage', { page: panelPage + 1, total: pageCount })">{{ panelPage + 1 }} / {{ pageCount }}</span>
-          <button type="button" :aria-label="t('nextPage')" :disabled="panelPage === pageCount - 1" class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30" @click="panelPage++">›</button>
+        <nav
+          v-if="pageCount > 1"
+          :aria-label="t('folderPages')"
+          class="mt-3 flex h-7 items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300"
+        >
+          <button
+            type="button"
+            :aria-label="t('previousPage')"
+            :disabled="panelPage === 0"
+            class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30"
+            @click="panelPage--"
+          >
+            ‹
+          </button>
+          <span
+            aria-live="polite"
+            :aria-label="t('folderPage', { page: panelPage + 1, total: pageCount })"
+            >{{ panelPage + 1 }} / {{ pageCount }}</span
+          >
+          <button
+            type="button"
+            :aria-label="t('nextPage')"
+            :disabled="panelPage === pageCount - 1"
+            class="size-7 rounded-md hover:bg-slate-500/10 disabled:opacity-30"
+            @click="panelPage++"
+          >
+            ›
+          </button>
         </nav>
       </div>
     </Teleport>

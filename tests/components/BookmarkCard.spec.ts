@@ -27,13 +27,16 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
     vi.clearAllMocks()
   })
 
-  it.each([{ ctrlKey: true }, { metaKey: true }])('Ctrl/⌘ 点击后台打开，不受当前页设置影响：%o', async (modifiers) => {
-    useSettingsStore().openInNewTab = false
-    const wrapper = mount(BookmarkCard, { props: { node: github } })
-    await wrapper.trigger('click', { button: 0, ...modifiers })
-    expect(openUrl).toHaveBeenCalledExactlyOnceWith('https://github.com', true, false)
-    wrapper.unmount()
-  })
+  it.each([{ ctrlKey: true }, { metaKey: true }])(
+    'Ctrl/⌘ 点击后台打开，不受当前页设置影响：%o',
+    async (modifiers) => {
+      useSettingsStore().openInNewTab = false
+      const wrapper = mount(BookmarkCard, { props: { node: github } })
+      await wrapper.trigger('click', { button: 0, ...modifiers })
+      expect(openUrl).toHaveBeenCalledExactlyOnceWith('https://github.com', true, false)
+      wrapper.unmount()
+    },
+  )
 
   it('中键仅打开一次后台标签，Ctrl+Shift 则前台打开', async () => {
     const wrapper = mount(BookmarkCard, { props: { node: github } })
@@ -51,17 +54,35 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
     await bookmarks.init()
     bookmarks.setViewFolder('10')
     const wrapper = mount(BookmarkGrid, { attachTo: document.body })
-    const target = wrapper.findAllComponents(BookmarkCard).find((card) => card.props('node').id === '101')!
-    const geometry = vi.spyOn(target.element, 'getBoundingClientRect').mockReturnValue({ left: 0, right: 100, top: 0, bottom: 48, width: 100, height: 48, x: 0, y: 0, toJSON: () => ({}) })
+    const target = wrapper
+      .findAllComponents(BookmarkCard)
+      .find((card) => card.props('node').id === '101')!
+    const geometry = vi.spyOn(target.element, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      right: 100,
+      top: 0,
+      bottom: 48,
+      width: 100,
+      height: 48,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
     const dataTransfer = new DataTransfer()
     dataTransfer.setData('text/plain', '100')
     bookmarks.draggingId = '100'
     await target.trigger('dragover', { clientX: 90, dataTransfer })
     expect(target.attributes('data-drop-zone')).toBe('after')
     await target.trigger('drop', { clientX: 90, dataTransfer })
-    await vi.waitFor(() => expect(bookmarks.currentChildren.map((node) => node.id)).toEqual(['101', '100', '102']))
+    await vi.waitFor(() =>
+      expect(bookmarks.currentChildren.map((node) => node.id)).toEqual(['101', '100', '102']),
+    )
     expect(chromeMock.bookmarks.move).toHaveBeenCalledTimes(1)
-    expect(chromeMock.bookmarks.move).toHaveBeenCalledWith('100', { parentId: '10', index: 2 }, expect.any(Function))
+    expect(chromeMock.bookmarks.move).toHaveBeenCalledWith(
+      '100',
+      { parentId: '10', index: 2 },
+      expect.any(Function),
+    )
     geometry.mockRestore()
     wrapper.unmount()
     bookmarks.dispose()
@@ -76,7 +97,9 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
     const wrapper = mount(BookmarkCard, { props: { node: devFolder }, attachTo: document.body })
 
     await wrapper.trigger('contextmenu')
-    const menuButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'))
+    const menuButtons = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'),
+    )
     const reset = menuButtons.find((button) => button.textContent?.trim() === '恢复默认主页')
     expect(reset).toBeDefined()
     expect(menuButtons.some((button) => button.textContent?.trim() === '设为主页')).toBe(false)
@@ -100,7 +123,9 @@ describe('BookmarkCard（Phase 2：拖拽 / 批量打开 / 二维码）', () => 
     const wrapper = mount(BookmarkCard, { props: { node: devFolder }, attachTo: document.body })
 
     await wrapper.trigger('contextmenu')
-    const menuButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'))
+    const menuButtons = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('.glass-strong button'),
+    )
     const setHome = menuButtons.find((button) => button.textContent?.trim() === '设为主页')
     expect(setHome).toBeDefined()
     expect(menuButtons.some((button) => button.textContent?.trim() === '恢复默认主页')).toBe(false)

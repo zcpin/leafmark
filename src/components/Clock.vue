@@ -4,18 +4,13 @@
 // 保证文本永不为空；刷新由页面共用的时间源驱动
 import { computed } from 'vue'
 
+import { uiLanguage } from '@/lib/i18n'
+
 const props = defineProps<{ now: Date }>()
 
+/** 语言标签由 i18n 统一缓存；时钟每分钟重算，不应重复探测。 */
 function safeLocale(): string {
-  try {
-    const raw =
-      typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage
-        ? String(chrome.i18n.getUILanguage() ?? '')
-        : String(navigator.language ?? '')
-    return raw || 'en-US'
-  } catch {
-    return 'en-US'
-  }
+  return uiLanguage()
 }
 
 function pad(n: number): string {

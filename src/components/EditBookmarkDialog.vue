@@ -7,7 +7,10 @@ import { useUiStore } from '@/stores/ui'
 import { useDialogFocus } from '@/composables/useDialogFocus'
 
 const ui = useUiStore()
-const { setPanel, titleId } = useDialogFocus(() => ui.editVisible, () => ui.resolveEdit(null))
+const { setPanel, titleId } = useDialogFocus(
+  () => ui.editVisible,
+  () => ui.resolveEdit(null),
+)
 
 const title = ref('')
 const url = ref('')
@@ -47,7 +50,14 @@ function submit() {
       class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 p-4"
       @click.self="ui.resolveEdit(null)"
     >
-      <div :ref="setPanel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1" class="glass-strong w-full max-w-sm rounded-2xl p-6 outline-none">
+      <div
+        :ref="setPanel"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        tabindex="-1"
+        class="glass-strong w-full max-w-sm rounded-2xl p-6 outline-none"
+      >
         <h2 :id="titleId" class="text-base font-semibold text-slate-800 dark:text-slate-100">
           {{ isFolder ? t('editFolderTitle') : t('editBookmarkTitle') }}
         </h2>
@@ -79,7 +89,9 @@ function submit() {
               "
               :style="!urlError ? undefined : ''"
             />
-            <span v-if="urlError" class="mt-1 block text-xs text-red-500">{{ t('urlRequired') }}</span>
+            <span v-if="urlError" class="mt-1 block text-xs text-red-500">{{
+              t('urlRequired')
+            }}</span>
           </label>
 
           <div class="flex justify-end gap-3 pt-2">

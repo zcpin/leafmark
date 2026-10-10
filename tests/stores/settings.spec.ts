@@ -60,7 +60,9 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     await store.init()
     expect(store.glassTransparency).toBe(15)
     expect(document.documentElement.style.getPropertyValue('--lm-glass-opacity')).toBe('0.85')
-    expect(document.documentElement.style.getPropertyValue('--lm-glass-strong-opacity')).toBe('0.95')
+    expect(document.documentElement.style.getPropertyValue('--lm-glass-strong-opacity')).toBe(
+      '0.95',
+    )
     store.dispose()
   })
 
@@ -69,7 +71,11 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     await store.init()
     expect(store.display).toEqual({ clock: true, yearProgress: true, stats: true })
     await store.setDisplay({ clock: false, stats: false })
-    expect(chromeMock.__storage.sync.get('display')).toEqual({ clock: false, yearProgress: true, stats: false })
+    expect(chromeMock.__storage.sync.get('display')).toEqual({
+      clock: false,
+      yearProgress: true,
+      stats: false,
+    })
     store.dispose()
     setActivePinia(createPinia())
     const reopened = useSettingsStore()
@@ -81,8 +87,14 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
   it('检测目录与忽略名单保存在本机，重新打开后恢复', async () => {
     const store = useSettingsStore()
     await store.init()
-    await store.setLinkCheckOptions({ folderId: '10', ignoredDomains: ['*.Example.com', 'https://login.test/path'] })
-    expect(chromeMock.__storage.local.get('linkCheckOptions')).toEqual({ folderId: '10', ignoredDomains: ['example.com', 'login.test'] })
+    await store.setLinkCheckOptions({
+      folderId: '10',
+      ignoredDomains: ['*.Example.com', 'https://login.test/path'],
+    })
+    expect(chromeMock.__storage.local.get('linkCheckOptions')).toEqual({
+      folderId: '10',
+      ignoredDomains: ['example.com', 'login.test'],
+    })
     store.dispose()
     setActivePinia(createPinia())
     const reopened = useSettingsStore()
@@ -248,9 +260,16 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
       await vi.advanceTimersByTimeAsync(300)
       await Promise.all([first, second, third])
       expect(chromeMock.storage.sync.set).toHaveBeenCalledTimes(1)
-      expect(chromeMock.__storage.sync.get('layout')).toEqual({ cardWidth: 250, cardHeight: 60, containerWidth: 85 })
+      expect(chromeMock.__storage.sync.get('layout')).toEqual({
+        cardWidth: 250,
+        cardHeight: 60,
+        containerWidth: 85,
+      })
       expect(chromeMock.__storage.sync.get('glassTransparency')).toBe(40)
-    } finally { store.dispose(); vi.useRealTimers() }
+    } finally {
+      store.dispose()
+      vi.useRealTimers()
+    }
   })
 
   it('布局保存失败恢复已持久化的预览', async () => {
@@ -302,7 +321,9 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     await store.init()
     const write = chromeMock.storage.sync.set.getMockImplementation()!
     let complete!: () => void
-    chromeMock.storage.sync.set.mockImplementationOnce((items, callback) => { complete = () => write(items, callback) })
+    chromeMock.storage.sync.set.mockImplementationOnce((items, callback) => {
+      complete = () => write(items, callback)
+    })
     const first = store.setLayout({ cardWidth: 220 })
     const flushing = store.flushAppearance()
     const second = store.setLayout({ cardWidth: 260 })
@@ -330,7 +351,9 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
     await store.init()
     const write = chromeMock.storage.sync.set.getMockImplementation()!
     let complete!: () => void
-    chromeMock.storage.sync.set.mockImplementationOnce((items, callback) => { complete = () => write(items, callback) })
+    chromeMock.storage.sync.set.mockImplementationOnce((items, callback) => {
+      complete = () => write(items, callback)
+    })
     const clock = store.setDisplay({ clock: false })
     const stats = store.setDisplay({ stats: false })
     complete()
@@ -349,7 +372,9 @@ describe('settings store（Phase 3：布局 / 壁纸）', () => {
       callback()
       chromeMock.runtime.lastError = null
     })
-    await expect(store.setPresetWallpaper('preset-1', 'data:image/svg+xml,new')).rejects.toThrow('sync unavailable')
+    await expect(store.setPresetWallpaper('preset-1', 'data:image/svg+xml,new')).rejects.toThrow(
+      'sync unavailable',
+    )
     expect(store.wallpaperId).toBe(previousId)
     expect(store.wallpaperDataUrl).toBe('data:image/jpeg,old')
     expect(chromeMock.__storage.local.get('wallpaperDataUrl')).toBe('data:image/jpeg,old')

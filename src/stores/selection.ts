@@ -20,12 +20,18 @@ export const useSelectionStore = defineStore('selection', () => {
   const error = ref('')
 
   const items = computed(() => bookmarks.currentChildren.filter(isMovableBookmark))
+  /** 卡片按 id 判选中时用集合查询，避免每张卡做一次 O(n) 数组扫描。 */
+  const selectedIdSet = computed<ReadonlySet<string>>(() => new Set(selectedIds.value))
   const selected = computed(() => {
-    const ids = new Set(selectedIds.value)
+    const ids = selectedIdSet.value
     return active.value ? items.value.filter((node) => ids.has(node.id)) : []
   })
-  const targets = computed(() => selected.value.map((node) => ({ id: node.id, parentId: node.parentId! })))
-  const allSelected = computed(() => items.value.length > 0 && selected.value.length === items.value.length)
+  const targets = computed(() =>
+    selected.value.map((node) => ({ id: node.id, parentId: node.parentId! })),
+  )
+  const allSelected = computed(
+    () => items.value.length > 0 && selected.value.length === items.value.length,
+  )
 
   function end() {
     if (busy.value) return
@@ -56,7 +62,8 @@ export const useSelectionStore = defineStore('selection', () => {
     const anchor = items.value.findIndex((node) => node.id === anchorId.value)
     const ids = new Set(selectedIds.value)
     if (range && anchor >= 0) {
-      for (const node of items.value.slice(Math.min(anchor, index), Math.max(anchor, index) + 1)) ids.add(node.id)
+      for (const node of items.value.slice(Math.min(anchor, index), Math.max(anchor, index) + 1))
+        ids.add(node.id)
     } else {
       if (ids.has(id)) ids.delete(id)
       else ids.add(id)
@@ -66,7 +73,8 @@ export const useSelectionStore = defineStore('selection', () => {
   }
 
   function selectAll() {
-    if (active.value && !busy.value && !moveOpen.value) selectedIds.value = items.value.map((node) => node.id)
+    if (active.value && !busy.value && !moveOpen.value)
+      selectedIds.value = items.value.map((node) => node.id)
   }
 
   function clear() {
@@ -93,7 +101,10 @@ export const useSelectionStore = defineStore('selection', () => {
       const result = await bookmarks.moveBookmarks([...targets.value], destinationId)
       selectedIds.value = result.failed
       if (result.failed.length) {
-        error.value = t('batchMovePartial', { n: result.moved.length, remaining: result.failed.length })
+        error.value = t('batchMovePartial', {
+          n: result.moved.length,
+          remaining: result.failed.length,
+        })
       } else {
         ui.toast(t('batchMoveResult', { n: result.moved.length, skipped: result.skipped.length }))
         busy.value = false
@@ -107,9 +118,13 @@ export const useSelectionStore = defineStore('selection', () => {
     }
   }
 
-  watch(() => bookmarks.currentFolder?.id, (id) => {
-    if (active.value && id !== folderId.value) end()
-  }, { flush: 'sync' })
+  watch(
+    () => bookmarks.currentFolder?.id,
+    (id) => {
+      if (active.value && id !== folderId.value) end()
+    },
+    { flush: 'sync' },
+  )
   watch(items, (nodes) => {
     if (busy.value) return
     const ids = new Set(nodes.map((node) => node.id))
@@ -117,7 +132,23 @@ export const useSelectionStore = defineStore('selection', () => {
   })
 
   return {
-    active, selectedIds, selected, targets, items, allSelected, moveOpen, busy, error,
-    start, end, toggle, selectAll, clear, openMove, closeMove, moveTo,
+    active,
+    selectedIds,
+    selectedIdSet,
+    selected,
+    targets,
+    items,
+    allSelected,
+    moveOpen,
+    busy,
+    error,
+    start,
+    end,
+    toggle,
+    selectAll,
+    clear,
+    openMove,
+    closeMove,
+    moveTo,
   }
 })

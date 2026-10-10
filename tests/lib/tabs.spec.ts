@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { openAllInGroup, openUrl } from '@/lib/tabs'
+import { MAX_BATCH_OPEN, openAllInGroup, openUrl } from '@/lib/tabs'
 import { chromeMock } from '../mocks/chrome'
 
 describe('tabs（B3 批量打开 + 分组）', () => {
@@ -46,6 +46,20 @@ describe('tabs（B3 批量打开 + 分组）', () => {
     expect(chromeMock.tabs.create).toHaveBeenCalledTimes(2)
   })
 
+  it('超过上限时只打开前 MAX_BATCH_OPEN 个标签页', async () => {
+    const urls = Array.from({ length: MAX_BATCH_OPEN + 20 }, (_, i) => `https://a.com/${i}`)
+    await openAllInGroup(urls, '开发')
+    expect(chromeMock.tabs.create).toHaveBeenCalledTimes(MAX_BATCH_OPEN)
+    expect(chromeMock.tabs.create).toHaveBeenLastCalledWith(
+      { url: `https://a.com/${MAX_BATCH_OPEN - 1}`, active: false },
+      expect.any(Function),
+    )
+    expect(chromeMock.tabs.group).toHaveBeenCalledWith(
+      { tabIds: expect.arrayContaining([1]) },
+      expect.any(Function),
+    )
+  })
+
   it('openUrl 新标签页模式调用 tabs.create', () => {
     openUrl('https://a.com', true)
     expect(chromeMock.tabs.create).toHaveBeenCalledWith(
@@ -63,7 +77,10 @@ describe('tabs（B3 批量打开 + 分组）', () => {
 
   it('快捷打开可以创建不抢焦点的后台标签页', () => {
     openUrl('https://a.com', true, false)
-    expect(chromeMock.tabs.create).toHaveBeenCalledWith({ url: 'https://a.com', active: false }, expect.any(Function))
+    expect(chromeMock.tabs.create).toHaveBeenCalledWith(
+      { url: 'https://a.com', active: false },
+      expect.any(Function),
+    )
   })
 
   it('批量创建标签页遇到 runtime.lastError 时跳过失败项，不进入空分组', async () => {
