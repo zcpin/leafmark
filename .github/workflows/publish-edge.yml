@@ -1,0 +1,46 @@
+name: Publish to Edge Add-ons
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft_only:
+        description: 只上传 draft，不提交审核
+        type: boolean
+        default: false
+      notes:
+        description: 提审备注，留空则使用默认（Leafmark 版本号）
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-edge-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Upload package and submit for certification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+          EDGE_NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "${{ inputs.draft_only }}" = "true" ]; then
+            pnpm publish:edge:draft
+          else
+            pnpm publish:edge
+          fi

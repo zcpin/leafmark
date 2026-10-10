@@ -23,7 +23,10 @@
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
-    "zip": "node scripts/zip-dist.mjs"
+    "zip": "node scripts/zip-dist.mjs",
+    "publish:edge": "node scripts/publish-edge.mjs",
+    "publish:edge:draft": "node scripts/publish-edge.mjs --no-publish",
+    "publish:edge:dry": "node scripts/publish-edge.mjs --dry-run"
   },
   "dependencies": {
     "pinia": "^4.0.3",

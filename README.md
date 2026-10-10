@@ -90,22 +90,25 @@ Leafmark 没有开发者账号体系、广告、遥测或开发者数据接收�
 
 技术栈：Vue 3 Composition API、TypeScript、Pinia、Vite 8、Tailwind CSS 4、Vitest。
 
-| 命令                 | 用途                                                               |
-| -------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`           | Web 开发预览，地址为 `http://localhost:5173/src/newtab/index.html` |
-| `pnpm watch`         | 监听文件变化，持续构建到 `dist/`；需在浏览器中刷新扩展             |
-| `pnpm build`         | 类型检查并构建扩展                                                 |
-| `pnpm preview`       | 预览构建结果，入口为 `/src/newtab/index.html`                      |
-| `pnpm test`          | 运行自动化测试                                                     |
-| `pnpm coverage`      | 测试并检查覆盖率阈值，报告输出到 `artifacts/coverage/`             |
-| `pnpm e2e`           | 在真实 Chromium 中加载 `dist/` 运行端到端回归（先 `pnpm build`）   |
-| `pnpm typecheck`     | TypeScript / Vue 类型检查                                          |
-| `pnpm typecheck:e2e` | 端到端代码的类型检查                                               |
-| `pnpm lint`          | ESLint 检查                                                        |
-| `pnpm format`        | 按 Prettier 统一格式（写入）                                       |
-| `pnpm format:check`  | 只检查格式；CI 与提交前用它把关                                    |
-| `pnpm zip`           | 将已有 `dist/` 打包，执行前先运行 `pnpm build`                     |
-| `pnpm icons`         | 从项目内的绘制脚本生成扩展图标                                     |
+| 命令                      | 用途                                                               |
+| ------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev`                | Web 开发预览，地址为 `http://localhost:5173/src/newtab/index.html` |
+| `pnpm watch`              | 监听文件变化，持续构建到 `dist/`；需在浏览器中刷新扩展             |
+| `pnpm build`              | 类型检查并构建扩展                                                 |
+| `pnpm preview`            | 预览构建结果，入口为 `/src/newtab/index.html`                      |
+| `pnpm test`               | 运行自动化测试                                                     |
+| `pnpm coverage`           | 测试并检查覆盖率阈值，报告输出到 `artifacts/coverage/`             |
+| `pnpm e2e`                | 在真实 Chromium 中加载 `dist/` 运行端到端回归（先 `pnpm build`）   |
+| `pnpm typecheck`          | TypeScript / Vue 类型检查                                          |
+| `pnpm typecheck:e2e`      | 端到端代码的类型检查                                               |
+| `pnpm lint`               | ESLint 检查                                                        |
+| `pnpm format`             | 按 Prettier 统一格式（写入）                                       |
+| `pnpm format:check`       | 只检查格式；CI 与提交前用它把关                                    |
+| `pnpm zip`                | 将已有 `dist/` 打包，执行前先运行 `pnpm build`                     |
+| `pnpm publish:edge:dry`   | 校验 Edge 发布配置并打印计划，不联网                               |
+| `pnpm publish:edge:draft` | 把 ZIP 上传到 Edge 商店草稿，不提交审核                            |
+| `pnpm publish:edge`       | 上传并提交 Edge 商店认证（需凭据，默认先 `pnpm build`）            |
+| `pnpm icons`              | 从项目内的绘制脚本生成扩展图标                                     |
 
 Web 预览使用示例书签和 `localStorage`，适合调整界面。原生书签写入、标签分组和网站权限申请应在加载扩展后验证。
 
@@ -135,7 +138,21 @@ git tag v1.2.0
 git push origin v1.2.0
 ```
 
-也可以从 Actions → Quality → Run workflow 手动构建所选分支。GitHub Release 提供安装包下载；Edge 商店更新仍通过商店后台提交。
+也可以从 Actions → Quality → Run workflow 手动构建所选分支。GitHub Release 提供安装包下载。
+
+### 发布到 Edge 商店
+
+叶签已在 Microsoft Edge 商店上架（1.0.0）。后续更新可用 Add-ons 发布 API 直接提交，不必再登录后台手动传包：
+
+```powershell
+pnpm build
+pnpm publish:edge:dry      # 先看计划：版本、文件、SHA-256、提审备注
+pnpm publish:edge          # 上传 ZIP 并提交认证，轮询到终态才返回
+```
+
+凭据写在仓库根目录 `.env`（模板见 `.env.example`，`.env` 已在 `.gitignore` 中）：`EDGE_PRODUCT_ID`、`EDGE_CLIENT_ID`、`EDGE_API_KEY`，均取自 Partner Center 的 Publish API 页面。也可以在 GitHub 仓库里配同名 secrets，然后从 Actions → **Publish to Edge Add-ons** → Run workflow 手动发布（可选只传草稿不提审）。
+
+注意：API 只能更新已存在的产品，首次上架仍需手动；每次上传的版本号必须高于商店已有版本；描述、截图等 listing 内容仍要在 Partner Center 维护。完整说明见 [docs/10-Edge 商店发布.md](./docs/10-Edge%20商店发布.md)。
 
 ## 使用边界
 
